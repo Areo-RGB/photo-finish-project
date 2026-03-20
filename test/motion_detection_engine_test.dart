@@ -17,7 +17,7 @@ void main() {
       expect(latest!.triggerEvent, isNull);
     });
 
-    test('two consecutive qualifying frames emit START with tuned defaults', () {
+    test('two consecutive qualifying frames emit first pulse event', () {
       final engine = MotionDetectionEngine(
         config: MotionDetectionConfig.defaults(),
       );
@@ -36,11 +36,11 @@ void main() {
 
       expect(latest, isNotNull);
       expect(latest!.triggerEvent, isNotNull);
-      expect(latest.triggerEvent!.type, MotionTriggerType.start);
-      expect(latest.triggerEvent!.splitIndex, 0);
+      expect(latest.triggerEvent!.type, MotionTriggerType.split);
+      expect(latest.triggerEvent!.splitIndex, 1);
     });
 
-    test('re-arm and second trigger emits STOP', () {
+    test('re-arm and second pulse increments index', () {
       final engine = MotionDetectionEngine(
         config: MotionDetectionConfig.defaults(),
       );
@@ -67,10 +67,11 @@ void main() {
 
       expect(latest, isNotNull);
       expect(latest!.triggerEvent, isNotNull);
-      expect(latest.triggerEvent!.type, MotionTriggerType.stop);
+      expect(latest.triggerEvent!.type, MotionTriggerType.split);
+      expect(latest.triggerEvent!.splitIndex, 2);
     });
 
-    test('additional detections are ignored after STOP until reset', () {
+    test('additional detections continue producing pulses after re-arm', () {
       final engine = MotionDetectionEngine(
         config: MotionDetectionConfig.defaults(),
       );
@@ -92,19 +93,20 @@ void main() {
       }
 
       for (int i = 0; i < 4; i++) {
-        engine.process(rawScore: 0.0, timestampMicros: 2400000 + (i * 100000));
+        engine.process(rawScore: 0.0, timestampMicros: 2800000 + (i * 100000));
       }
 
       MotionFrameStats? afterStop;
       for (int i = 0; i < 2; i++) {
         afterStop = engine.process(
           rawScore: 0.24,
-          timestampMicros: 2800000 + (i * 100000),
+          timestampMicros: 3300000 + (i * 100000),
         );
       }
 
-      expect(afterStop, isNotNull);
-      expect(afterStop!.triggerEvent, isNull);
+      expect(afterStop!.triggerEvent, isNotNull);
+      expect(afterStop.triggerEvent!.type, MotionTriggerType.split);
+      expect(afterStop.triggerEvent!.splitIndex, 3);
     });
   });
 }

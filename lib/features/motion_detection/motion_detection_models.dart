@@ -161,8 +161,7 @@ class MotionDetectionEngine {
   bool _armed = true;
   int? _belowSinceMicros;
   int? _lastTriggerMicros;
-  bool _runStarted = false;
-  bool _runStopped = false;
+  int _pulseCounter = 0;
 
   MotionDetectionConfig get config => _config;
 
@@ -175,8 +174,7 @@ class MotionDetectionEngine {
     _armed = true;
     _belowSinceMicros = null;
     _lastTriggerMicros = null;
-    _runStarted = false;
-    _runStopped = false;
+    _pulseCounter = 0;
   }
 
   MotionFrameStats process({
@@ -225,24 +223,13 @@ class MotionDetectionEngine {
       _aboveCount = 0;
       _armed = false;
       _belowSinceMicros = null;
-
-      if (!_runStarted) {
-        _runStarted = true;
-        trigger = MotionTriggerEvent(
-          triggerMicros: timestampMicros,
-          score: effectiveScore,
-          type: MotionTriggerType.start,
-          splitIndex: 0,
-        );
-      } else if (!_runStopped) {
-        _runStopped = true;
-        trigger = MotionTriggerEvent(
-          triggerMicros: timestampMicros,
-          score: effectiveScore,
-          type: MotionTriggerType.stop,
-          splitIndex: 0,
-        );
-      }
+      _pulseCounter += 1;
+      trigger = MotionTriggerEvent(
+        triggerMicros: timestampMicros,
+        score: effectiveScore,
+        type: MotionTriggerType.split,
+        splitIndex: _pulseCounter,
+      );
     }
 
     return MotionFrameStats(

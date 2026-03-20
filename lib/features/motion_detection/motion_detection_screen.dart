@@ -2,19 +2,15 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:sprint_sync/features/motion_detection/motion_detection_controller.dart';
 import 'package:sprint_sync/features/motion_detection/motion_detection_models.dart';
-import 'package:sprint_sync/features/race_sync/race_sync_controller.dart';
-import 'package:sprint_sync/features/race_sync/race_sync_models.dart';
 
 class MotionDetectionScreen extends StatefulWidget {
   const MotionDetectionScreen({
     super.key,
     required this.controller,
-    this.raceSyncController,
     this.showPreview = true,
   });
 
   final MotionDetectionController controller;
-  final RaceSyncController? raceSyncController;
   final bool showPreview;
 
   @override
@@ -54,20 +50,11 @@ class _MotionDetectionScreenState extends State<MotionDetectionScreen>
 
   @override
   Widget build(BuildContext context) {
-    final animation = widget.raceSyncController == null
-        ? widget.controller
-        : Listenable.merge(<Listenable>[
-            widget.controller,
-            widget.raceSyncController!,
-          ]);
     return AnimatedBuilder(
-      animation: animation,
+      animation: widget.controller,
       builder: (context, child) {
         final config = widget.controller.config;
         final stats = widget.controller.latestStats;
-        final connectionQuality =
-            widget.raceSyncController?.connectionQuality ??
-            ConnectionQuality.offline;
 
         return ListView(
           padding: const EdgeInsets.all(16),
@@ -76,7 +63,6 @@ class _MotionDetectionScreenState extends State<MotionDetectionScreen>
               _buildPreviewCard(
                 widget.controller.cameraController,
                 roiCenterX: config.roiCenterX,
-                connectionQuality: connectionQuality,
               ),
             if (widget.showPreview) const SizedBox(height: 12),
             _buildStopwatchCard(),
@@ -297,7 +283,10 @@ class _MotionDetectionScreenState extends State<MotionDetectionScreen>
                 entry,
               ) {
                 final splitIndex = entry.key + 1;
-                final label = splitIndex == 1
+                final isFinish =
+                    !widget.controller.isRunActive &&
+                    splitIndex == widget.controller.currentSplitMicros.length;
+                final label = isFinish
                     ? 'Finish'
                     : formatSplitLabel(splitIndex);
                 return Text(
@@ -334,9 +323,8 @@ class _MotionDetectionScreenState extends State<MotionDetectionScreen>
               const SizedBox(height: 6),
               ...lastRun.splitMicros.asMap().entries.map((entry) {
                 final splitIndex = entry.key + 1;
-                final label = splitIndex == 1
-                    ? 'Finish'
-                    : formatSplitLabel(splitIndex);
+                final isFinish = splitIndex == lastRun.splitMicros.length;
+                final label = isFinish ? 'Finish' : formatSplitLabel(splitIndex);
                 return Text(
                   '$label: ${formatDurationMicros(entry.value)}',
                   key: ValueKey<String>('saved_split_$splitIndex'),
@@ -352,9 +340,8 @@ class _MotionDetectionScreenState extends State<MotionDetectionScreen>
   Widget _buildPreviewCard(
     CameraController? controller, {
     required double roiCenterX,
-    required ConnectionQuality connectionQuality,
   }) {
-    final statusColor = _colorForConnectionQuality(connectionQuality);
+    final statusColor = const Color(0xFF005A8D);
     final tripwireAlignmentX = _tripwireAlignmentForRoiCenter(roiCenterX);
     late final Widget previewChild;
     late final double previewAspectRatio;
@@ -403,18 +390,5 @@ class _MotionDetectionScreenState extends State<MotionDetectionScreen>
   double _tripwireAlignmentForRoiCenter(double roiCenterX) {
     final clamped = roiCenterX.clamp(0.0, 1.0);
     return (clamped * 2.0) - 1.0;
-  }
-
-  Color _colorForConnectionQuality(ConnectionQuality connectionQuality) {
-    switch (connectionQuality) {
-      case ConnectionQuality.offline:
-        return Colors.grey;
-      case ConnectionQuality.good:
-        return Colors.green;
-      case ConnectionQuality.warning:
-        return Colors.orange;
-      case ConnectionQuality.bad:
-        return Colors.red;
-    }
   }
 }

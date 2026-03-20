@@ -9,3 +9,18 @@ script = ""
 name = "Run"
 icon = "run"
 command = "flutter run"
+
+[[actions]]
+name = "Build debug APK"
+icon = "build"
+command = "flutter build apk --debug"
+
+[[actions]]
+name = "Install debug APK (all devices)"
+icon = "download"
+command = "npm run install:debug:devices"
+
+[[actions]]
+name = "Build & install debug (all devices)"
+icon = "package"
+command = "npm run rebuild:debug:devices"

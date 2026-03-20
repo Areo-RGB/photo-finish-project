@@ -235,35 +235,15 @@ class MotionDetectionController extends ChangeNotifier {
   }
 
   void ingestTrigger(MotionTriggerEvent trigger, {bool forwardToSync = true}) {
-    final normalizedTrigger = trigger.type == MotionTriggerType.split
-        ? MotionTriggerEvent(
-            triggerMicros: trigger.triggerMicros,
-            score: trigger.score,
-            type: MotionTriggerType.stop,
-            splitIndex: 0,
-          )
-        : trigger;
-
-    if (normalizedTrigger.type == MotionTriggerType.start &&
-        _runSnapshot.startedAtMicros != null &&
-        !_runSnapshot.isActive) {
-      return;
-    }
-
-    if (normalizedTrigger.type == MotionTriggerType.stop &&
-        (!_runSnapshot.isActive || _runSnapshot.startedAtMicros == null)) {
-      return;
-    }
-
-    _addTriggerToHistory(normalizedTrigger);
+    _addTriggerToHistory(trigger);
     if (forwardToSync) {
-      _onTrigger?.call(normalizedTrigger);
+      _onTrigger?.call(trigger);
     }
 
-    if (normalizedTrigger.type == MotionTriggerType.start) {
+    if (trigger.type == MotionTriggerType.start) {
       _runSnapshot = MotionRunSnapshot(
         isActive: true,
-        startedAtMicros: normalizedTrigger.triggerMicros,
+        startedAtMicros: trigger.triggerMicros,
         elapsedMicros: 0,
         splitMicros: const <int>[],
       );
@@ -273,17 +253,34 @@ class MotionDetectionController extends ChangeNotifier {
       return;
     }
 
+    if (!_runSnapshot.isActive || _runSnapshot.startedAtMicros == null) {
+      return;
+    }
+
     final elapsedMicros = math.max(
       0,
-      normalizedTrigger.triggerMicros - _runSnapshot.startedAtMicros!,
+      trigger.triggerMicros - _runSnapshot.startedAtMicros!,
     );
-    final splitMicros = <int>[elapsedMicros];
-    _runSnapshot = _runSnapshot.copyWith(
-      isActive: false,
-      elapsedMicros: elapsedMicros,
-      splitMicros: splitMicros,
-    );
-    _stopRunTicker();
+
+    if (trigger.type == MotionTriggerType.split) {
+      _runSnapshot = _runSnapshot.copyWith(
+        elapsedMicros: elapsedMicros,
+        splitMicros: <int>[..._runSnapshot.splitMicros, elapsedMicros],
+      );
+      unawaited(_persistCurrentRun());
+      notifyListeners();
+      return;
+    }
+
+    if (trigger.type == MotionTriggerType.stop) {
+      _runSnapshot = _runSnapshot.copyWith(
+        isActive: false,
+        elapsedMicros: elapsedMicros,
+        splitMicros: <int>[..._runSnapshot.splitMicros, elapsedMicros],
+      );
+      _stopRunTicker();
+    }
+
     unawaited(_persistCurrentRun());
     notifyListeners();
   }
