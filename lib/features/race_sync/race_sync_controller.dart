@@ -1,0 +1,371 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:sprint_sync/core/models/app_models.dart';
+import 'package:sprint_sync/core/repositories/local_repository.dart';
+import 'package:sprint_sync/core/services/nearby_bridge.dart';
+import 'package:sprint_sync/features/motion_detection/motion_detection_models.dart';
+import 'package:sprint_sync/features/race_sync/race_sync_models.dart';
+
+class RaceSyncController extends ChangeNotifier {
+  RaceSyncController({
+    required LocalRepository repository,
+    required NearbyBridge nearbyBridge,
+  }) : _repository = repository,
+       _nearbyBridge = nearbyBridge {
+    _eventsSubscription = _nearbyBridge.events.listen(_onNearbyEvent);
+    unawaited(_loadLastRun());
+  }
+
+  static const String _serviceId = 'com.paul.sprintsync.nearby';
+
+  final LocalRepository _repository;
+  final NearbyBridge _nearbyBridge;
+
+  StreamSubscription<Map<String, dynamic>>? _eventsSubscription;
+
+  RaceRole _role = RaceRole.none;
+  SessionState _sessionState = SessionState.initial();
+  LastRunResult? _lastRun;
+  String _sessionId = '';
+
+  final Map<String, NearbyEndpoint> _discovered = <String, NearbyEndpoint>{};
+  final Set<String> _connectedEndpointIds = <String>{};
+  final List<String> _logs = <String>[];
+
+  bool _busy = false;
+  bool _permissionsGranted = false;
+  String? _errorText;
+
+  RaceRole get role => _role;
+  SessionState get sessionState => _sessionState;
+  LastRunResult? get lastRun => _lastRun;
+  List<NearbyEndpoint> get discoveredEndpoints => _discovered.values.toList();
+  List<String> get connectedEndpointIds => _connectedEndpointIds.toList();
+  List<String> get logs => List.unmodifiable(_logs);
+  bool get busy => _busy;
+  bool get permissionsGranted => _permissionsGranted;
+  String? get errorText => _errorText;
+
+  Future<void> _loadLastRun() async {
+    _lastRun = await _repository.loadLastRun();
+    notifyListeners();
+  }
+
+  Future<void> requestPermissions() async {
+    _busy = true;
+    _errorText = null;
+    notifyListeners();
+
+    try {
+      final status = await _nearbyBridge.requestPermissions();
+      _permissionsGranted = status['granted'] == true;
+      final deniedRaw = status['denied'];
+      final denied = deniedRaw is List ? deniedRaw.join(', ') : '';
+      _addLog(
+        _permissionsGranted
+            ? 'Permissions granted.'
+            : 'Permissions denied: $denied',
+      );
+    } catch (error) {
+      _errorText = 'Permission request failed: $error';
+      _addLog(_errorText!);
+    } finally {
+      _busy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> startHosting() async {
+    await _ensurePermissions();
+    if (!_permissionsGranted) {
+      return;
+    }
+
+    _role = RaceRole.host;
+    _sessionId = 'session-${DateTime.now().millisecondsSinceEpoch}';
+    _sessionState = SessionState.initial();
+    _discovered.clear();
+    notifyListeners();
+
+    try {
+      await _nearbyBridge.startHosting(
+        serviceId: _serviceId,
+        endpointName: 'SprintSyncHost',
+      );
+      _addLog('Hosting started ($_sessionId).');
+    } catch (error) {
+      _errorText = 'Start hosting failed: $error';
+      _addLog(_errorText!);
+      notifyListeners();
+    }
+  }
+
+  Future<void> startDiscovery() async {
+    await _ensurePermissions();
+    if (!_permissionsGranted) {
+      return;
+    }
+
+    _role = RaceRole.client;
+    _discovered.clear();
+    notifyListeners();
+
+    try {
+      await _nearbyBridge.startDiscovery(
+        serviceId: _serviceId,
+        endpointName: 'SprintSyncClient',
+      );
+      _addLog('Discovery started.');
+    } catch (error) {
+      _errorText = 'Start discovery failed: $error';
+      _addLog(_errorText!);
+      notifyListeners();
+    }
+  }
+
+  Future<void> requestConnection(String endpointId) async {
+    try {
+      await _nearbyBridge.requestConnection(
+        endpointId: endpointId,
+        endpointName: 'SprintSyncClient',
+      );
+      _addLog('Connection requested: $endpointId');
+    } catch (error) {
+      _errorText = 'Request connection failed: $error';
+      _addLog(_errorText!);
+      notifyListeners();
+    }
+  }
+
+  Future<void> disconnect(String endpointId) async {
+    try {
+      await _nearbyBridge.disconnect(endpointId: endpointId);
+      _connectedEndpointIds.remove(endpointId);
+      _addLog('Disconnected: $endpointId');
+      notifyListeners();
+    } catch (error) {
+      _errorText = 'Disconnect failed: $error';
+      _addLog(_errorText!);
+      notifyListeners();
+    }
+  }
+
+  Future<void> stopAll() async {
+    try {
+      await _nearbyBridge.stopAll();
+      _connectedEndpointIds.clear();
+      _discovered.clear();
+      _role = RaceRole.none;
+      _addLog('Stopped all Nearby operations.');
+      notifyListeners();
+    } catch (error) {
+      _errorText = 'Stop all failed: $error';
+      _addLog(_errorText!);
+      notifyListeners();
+    }
+  }
+
+  Future<void> onMotionTrigger(MotionTriggerEvent trigger) async {
+    if (_role != RaceRole.host) {
+      return;
+    }
+
+    if (trigger.type == MotionTriggerType.start) {
+      final startedAtEpochMs = trigger.triggerMicros ~/ 1000;
+      _sessionState = SessionState(
+        raceStarted: true,
+        startedAtEpochMs: startedAtEpochMs,
+        splitMicros: const <int>[],
+      );
+      await _persistRun();
+      _addLog('Race started at $startedAtEpochMs ms.');
+      notifyListeners();
+
+      await _broadcast(
+        RaceEventMessage(
+          type: RaceEventType.raceStarted,
+          sessionId: _sessionId,
+          startedAtEpochMs: startedAtEpochMs,
+        ),
+      );
+      return;
+    }
+
+    if (!_sessionState.raceStarted || _sessionState.startedAtEpochMs == null) {
+      return;
+    }
+
+    final elapsedMicros =
+        trigger.triggerMicros - (_sessionState.startedAtEpochMs! * 1000);
+    final splitMicros = List<int>.from(_sessionState.splitMicros)
+      ..add(elapsedMicros);
+    _sessionState = _sessionState.copyWith(splitMicros: splitMicros);
+    await _persistRun();
+
+    _addLog('Split ${splitMicros.length}: ${elapsedMicros}us');
+    notifyListeners();
+
+    await _broadcast(
+      RaceEventMessage(
+        type: RaceEventType.raceSplit,
+        sessionId: _sessionId,
+        splitIndex: splitMicros.length,
+        elapsedMicros: elapsedMicros,
+      ),
+    );
+  }
+
+  Future<void> _ensurePermissions() async {
+    if (_permissionsGranted) {
+      return;
+    }
+    await requestPermissions();
+  }
+
+  void _onNearbyEvent(Map<String, dynamic> event) {
+    final type = event['type'];
+    if (type is! String) {
+      return;
+    }
+
+    switch (type) {
+      case 'endpoint_found':
+        final id = event['endpointId']?.toString();
+        if (id == null || id.isEmpty) {
+          break;
+        }
+        final endpoint = NearbyEndpoint(
+          id: id,
+          name: event['endpointName']?.toString() ?? 'Unknown',
+          serviceId: event['serviceId']?.toString() ?? '',
+        );
+        _discovered[id] = endpoint;
+        _addLog('Endpoint found: ${endpoint.name} ($id)');
+        notifyListeners();
+        break;
+      case 'endpoint_lost':
+        final id = event['endpointId']?.toString();
+        if (id != null) {
+          _discovered.remove(id);
+          _addLog('Endpoint lost: $id');
+          notifyListeners();
+        }
+        break;
+      case 'connection_result':
+        final endpointId = event['endpointId']?.toString();
+        final connected = event['connected'] == true;
+        if (endpointId != null) {
+          if (connected) {
+            _connectedEndpointIds.add(endpointId);
+          } else {
+            _connectedEndpointIds.remove(endpointId);
+          }
+        }
+        _addLog('Connection event: $event');
+        notifyListeners();
+        break;
+      case 'endpoint_disconnected':
+        final endpointId = event['endpointId']?.toString();
+        if (endpointId != null) {
+          _connectedEndpointIds.remove(endpointId);
+          _addLog('Endpoint disconnected: $endpointId');
+          notifyListeners();
+        }
+        break;
+      case 'permission_status':
+        _permissionsGranted = event['granted'] == true;
+        _addLog('Permission status updated: $_permissionsGranted');
+        notifyListeners();
+        break;
+      case 'payload_received':
+        final message = event['message']?.toString();
+        if (message != null) {
+          _handlePayload(message);
+        }
+        break;
+      case 'error':
+        _errorText = event['message']?.toString() ?? 'Unknown Nearby error';
+        _addLog('Error: $_errorText');
+        notifyListeners();
+        break;
+    }
+  }
+
+  void _handlePayload(String raw) {
+    final message = RaceEventMessage.tryParse(raw);
+    if (message == null) {
+      _addLog('Ignored malformed payload: $raw');
+      return;
+    }
+
+    if (_sessionId.isEmpty) {
+      _sessionId = message.sessionId;
+    }
+
+    switch (message.type) {
+      case RaceEventType.raceStarted:
+        if (message.startedAtEpochMs == null) {
+          return;
+        }
+        _sessionState = SessionState(
+          raceStarted: true,
+          startedAtEpochMs: message.startedAtEpochMs,
+          splitMicros: const <int>[],
+        );
+        _addLog('Race started from host payload.');
+        break;
+      case RaceEventType.raceSplit:
+        if (message.elapsedMicros == null) {
+          return;
+        }
+        final splitMicros = List<int>.from(_sessionState.splitMicros)
+          ..add(message.elapsedMicros!);
+        _sessionState = _sessionState.copyWith(splitMicros: splitMicros);
+        _addLog('Split received: ${message.elapsedMicros}us');
+        break;
+    }
+
+    unawaited(_persistRun());
+    notifyListeners();
+  }
+
+  Future<void> _broadcast(RaceEventMessage message) async {
+    final payload = message.toJsonString();
+    for (final endpointId in _connectedEndpointIds) {
+      try {
+        await _nearbyBridge.sendBytes(
+          endpointId: endpointId,
+          messageJson: payload,
+        );
+      } catch (error) {
+        _addLog('Broadcast failed to $endpointId: $error');
+      }
+    }
+  }
+
+  Future<void> _persistRun() async {
+    if (_sessionState.startedAtEpochMs == null) {
+      return;
+    }
+    final run = LastRunResult(
+      startedAtEpochMs: _sessionState.startedAtEpochMs!,
+      splitMicros: List<int>.from(_sessionState.splitMicros),
+    );
+    _lastRun = run;
+    await _repository.saveLastRun(run);
+  }
+
+  void _addLog(String line) {
+    _logs.insert(0, '${DateTime.now().toIso8601String()} $line');
+    if (_logs.length > 80) {
+      _logs.removeLast();
+    }
+  }
+
+  @override
+  void dispose() {
+    _eventsSubscription?.cancel();
+    super.dispose();
+  }
+}

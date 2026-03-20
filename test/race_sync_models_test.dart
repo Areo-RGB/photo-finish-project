@@ -1,0 +1,26 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:sprint_sync/features/race_sync/race_sync_models.dart';
+
+void main() {
+  test('race event message serializes and parses', () {
+    const message = RaceEventMessage(
+      type: RaceEventType.raceSplit,
+      sessionId: 'session-1',
+      splitIndex: 2,
+      elapsedMicros: 153200,
+    );
+
+    final encoded = message.toJsonString();
+    final decoded = RaceEventMessage.tryParse(encoded);
+
+    expect(decoded, isNotNull);
+    expect(decoded!.type, RaceEventType.raceSplit);
+    expect(decoded.sessionId, 'session-1');
+    expect(decoded.splitIndex, 2);
+    expect(decoded.elapsedMicros, 153200);
+  });
+
+  test('invalid payload returns null', () {
+    expect(RaceEventMessage.tryParse('not-json'), isNull);
+  });
+}
