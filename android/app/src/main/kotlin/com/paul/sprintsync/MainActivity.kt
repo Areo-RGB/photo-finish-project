@@ -14,6 +14,7 @@ import com.google.android.gms.nearby.connection.ConnectionLifecycleCallback
 import com.google.android.gms.nearby.connection.ConnectionResolution
 import com.google.android.gms.nearby.connection.ConnectionsClient
 import com.google.android.gms.nearby.connection.ConnectionsStatusCodes
+import com.google.android.gms.nearby.connection.DiscoveredEndpointInfo
 import com.google.android.gms.nearby.connection.DiscoveryOptions
 import com.google.android.gms.nearby.connection.EndpointDiscoveryCallback
 import com.google.android.gms.nearby.connection.Payload
@@ -35,12 +36,21 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
         private val STRATEGY = Strategy.P2P_STAR
     }
 
+    private enum class NearbyRole {
+        NONE,
+        HOST,
+        CLIENT,
+    }
+
     private val connectedEndpointIds = mutableSetOf<String>()
     private val mainHandler = Handler(Looper.getMainLooper())
-
     private lateinit var connectionsClient: ConnectionsClient
+
     private var eventSink: EventChannel.EventSink? = null
     private var pendingPermissionResult: MethodChannel.Result? = null
+    private var activeRole: NearbyRole = NearbyRole.NONE
+    private var pendingEndpointId: String? = null
+    private var requestedEndpointId: String? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -49,9 +59,7 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             METHOD_CHANNEL_NAME,
-        ).setMethodCallHandler { call, result ->
-            handleMethodCall(call, result)
-        }
+        ).setMethodCallHandler(::handleMethodCall)
 
         EventChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -79,7 +87,7 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
             }
 
             "stopHosting" -> {
-                connectionsClient.stopAdvertising()
+                stopHosting()
                 result.success(null)
             }
 
@@ -89,7 +97,7 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
             }
 
             "stopDiscovery" -> {
-                connectionsClient.stopDiscovery()
+                stopDiscovery()
                 result.success(null)
             }
 
@@ -140,12 +148,11 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
         }
         val denied = deniedPermissions()
         if (denied.isEmpty()) {
-            result.success(
-                mapOf(
-                    "granted" to true,
-                    "denied" to emptyList<String>(),
-                ),
+            val payload = mapOf(
+                "granted" to true,
+                "denied" to emptyList<String>(),
             )
+            result.success(payload)
             emitEvent(
                 mapOf(
                     "type" to "permission_status",
@@ -176,13 +183,16 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
 
         val callback = pendingPermissionResult ?: return
         pendingPermissionResult = null
+
         val denied = deniedPermissions()
         val granted = denied.isEmpty()
-        val payload = mapOf(
-            "granted" to granted,
-            "denied" to denied,
+        callback.success(
+            mapOf(
+                "granted" to granted,
+                "denied" to denied,
+            ),
         )
-        callback.success(payload)
+
         emitEvent(
             mapOf(
                 "type" to "permission_status",
@@ -197,6 +207,7 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
         endpointName: String,
         result: MethodChannel.Result,
     ) {
+        normalizeForRole(NearbyRole.HOST)
         val options = AdvertisingOptions.Builder()
             .setStrategy(STRATEGY)
             .build()
@@ -204,15 +215,24 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
             .startAdvertising(endpointName, serviceId, connectionLifecycleCallback, options)
             .addOnSuccessListener { result.success(null) }
             .addOnFailureListener { error ->
+                clearTransientState()
                 emitError("startHosting failed: ${error.localizedMessage ?: "unknown"}")
                 result.error("start_hosting_failed", error.localizedMessage, null)
             }
+    }
+
+    private fun stopHosting() {
+        connectionsClient.stopAdvertising()
+        connectionsClient.stopAllEndpoints()
+        clearTransientState()
+        activeRole = NearbyRole.NONE
     }
 
     private fun startDiscovery(
         serviceId: String,
         result: MethodChannel.Result,
     ) {
+        normalizeForRole(NearbyRole.CLIENT)
         val options = DiscoveryOptions.Builder()
             .setStrategy(STRATEGY)
             .build()
@@ -220,9 +240,17 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
             .startDiscovery(serviceId, endpointDiscoveryCallback, options)
             .addOnSuccessListener { result.success(null) }
             .addOnFailureListener { error ->
+                clearTransientState()
                 emitError("startDiscovery failed: ${error.localizedMessage ?: "unknown"}")
                 result.error("start_discovery_failed", error.localizedMessage, null)
             }
+    }
+
+    private fun stopDiscovery() {
+        connectionsClient.stopDiscovery()
+        connectionsClient.stopAllEndpoints()
+        clearTransientState()
+        activeRole = NearbyRole.NONE
     }
 
     private fun requestConnection(
@@ -230,10 +258,39 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
         endpointName: String,
         result: MethodChannel.Result,
     ) {
+        if (activeRole != NearbyRole.CLIENT) {
+            val message = "requestConnection ignored: not in client mode."
+            emitError(message)
+            result.error("invalid_role", message, null)
+            return
+        }
+        if (connectedEndpointIds.isNotEmpty() && !connectedEndpointIds.contains(endpointId)) {
+            val message = "requestConnection ignored: already connected to another endpoint."
+            emitError(message)
+            result.error("already_connected", message, null)
+            return
+        }
+        if (pendingEndpointId != null && pendingEndpointId != endpointId) {
+            val message = "requestConnection ignored: another connection is pending."
+            emitError(message)
+            result.error("pending_connection", message, null)
+            return
+        }
+        if (requestedEndpointId != null && requestedEndpointId != endpointId) {
+            val message = "requestConnection ignored: request already in flight."
+            emitError(message)
+            result.error("request_in_flight", message, null)
+            return
+        }
+
+        requestedEndpointId = endpointId
         connectionsClient
             .requestConnection(endpointName, endpointId, connectionLifecycleCallback)
             .addOnSuccessListener { result.success(null) }
             .addOnFailureListener { error ->
+                if (requestedEndpointId == endpointId) {
+                    requestedEndpointId = null
+                }
                 emitError("requestConnection failed: ${error.localizedMessage ?: "unknown"}")
                 result.error("request_connection_failed", error.localizedMessage, null)
             }
@@ -244,6 +301,12 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
         messageJson: String,
         result: MethodChannel.Result,
     ) {
+        if (!connectedEndpointIds.contains(endpointId)) {
+            val message = "sendBytes ignored: endpoint not connected ($endpointId)."
+            emitError(message)
+            result.error("endpoint_not_connected", message, null)
+            return
+        }
         val payload = Payload.fromBytes(messageJson.toByteArray(StandardCharsets.UTF_8))
         connectionsClient
             .sendPayload(endpointId, payload)
@@ -256,7 +319,7 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
 
     private fun disconnect(endpointId: String) {
         connectionsClient.disconnectFromEndpoint(endpointId)
-        connectedEndpointIds.remove(endpointId)
+        clearEndpointState(endpointId)
         emitEvent(
             mapOf(
                 "type" to "endpoint_disconnected",
@@ -269,7 +332,8 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
         connectionsClient.stopAdvertising()
         connectionsClient.stopDiscovery()
         connectionsClient.stopAllEndpoints()
-        connectedEndpointIds.clear()
+        clearTransientState()
+        activeRole = NearbyRole.NONE
     }
 
     private fun deniedPermissions(): List<String> {
@@ -280,22 +344,50 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
     }
 
     private fun requiredPermissions(): List<String> {
-        val permissions = mutableListOf(Manifest.permission.CAMERA)
+        val permissions = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
+            permissions += Manifest.permission.NEARBY_WIFI_DEVICES
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            permissions.add(Manifest.permission.BLUETOOTH_SCAN)
-            permissions.add(Manifest.permission.BLUETOOTH_CONNECT)
-            permissions.add(Manifest.permission.BLUETOOTH_ADVERTISE)
+            permissions += Manifest.permission.BLUETOOTH_ADVERTISE
+            permissions += Manifest.permission.BLUETOOTH_CONNECT
+            permissions += Manifest.permission.BLUETOOTH_SCAN
         } else {
-            permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
+            permissions += Manifest.permission.ACCESS_COARSE_LOCATION
+            permissions += Manifest.permission.ACCESS_FINE_LOCATION
         }
-        return permissions
+        return permissions.distinct()
+    }
+
+    private fun normalizeForRole(role: NearbyRole) {
+        connectionsClient.stopAdvertising()
+        connectionsClient.stopDiscovery()
+        connectionsClient.stopAllEndpoints()
+        clearTransientState()
+        activeRole = role
+    }
+
+    private fun clearTransientState() {
+        pendingEndpointId = null
+        requestedEndpointId = null
+        connectedEndpointIds.clear()
+    }
+
+    private fun clearEndpointState(endpointId: String) {
+        if (pendingEndpointId == endpointId) {
+            pendingEndpointId = null
+        }
+        if (requestedEndpointId == endpointId) {
+            requestedEndpointId = null
+        }
+        connectedEndpointIds.remove(endpointId)
     }
 
     private val endpointDiscoveryCallback = object : EndpointDiscoveryCallback() {
-        override fun onEndpointFound(endpointId: String, info: com.google.android.gms.nearby.connection.DiscoveredEndpointInfo) {
+        override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
+            if (activeRole != NearbyRole.CLIENT) {
+                return
+            }
             emitEvent(
                 mapOf(
                     "type" to "endpoint_found",
@@ -307,6 +399,7 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
         }
 
         override fun onEndpointLost(endpointId: String) {
+            clearEndpointState(endpointId)
             emitEvent(
                 mapOf(
                     "type" to "endpoint_lost",
@@ -318,18 +411,46 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
 
     private val connectionLifecycleCallback = object : ConnectionLifecycleCallback() {
         override fun onConnectionInitiated(endpointId: String, info: ConnectionInfo) {
+            val hasPendingDifferent = pendingEndpointId != null && pendingEndpointId != endpointId
+            val clientBusy = activeRole == NearbyRole.CLIENT &&
+                connectedEndpointIds.isNotEmpty() &&
+                !connectedEndpointIds.contains(endpointId)
+
+            if (hasPendingDifferent || clientBusy) {
+                connectionsClient.rejectConnection(endpointId)
+                emitEvent(
+                    mapOf(
+                        "type" to "connection_result",
+                        "endpointId" to endpointId,
+                        "connected" to false,
+                        "statusCode" to ConnectionsStatusCodes.STATUS_ENDPOINT_IO_ERROR,
+                        "statusMessage" to "Connection rejected: competing connection state.",
+                    ),
+                )
+                return
+            }
+
+            pendingEndpointId = endpointId
+            if (activeRole == NearbyRole.CLIENT) {
+                requestedEndpointId = endpointId
+            }
+
             // Auto-accept for local open sessions in v1.
             connectionsClient
                 .acceptConnection(endpointId, payloadCallback)
                 .addOnFailureListener { error ->
-                    emitError("acceptConnection failed: ${error.localizedMessage ?: "unknown"}")
+                    clearEndpointState(endpointId)
                     emitEvent(
                         mapOf(
                             "type" to "connection_result",
                             "endpointId" to endpointId,
                             "connected" to false,
+                            "statusCode" to ConnectionsStatusCodes.STATUS_ENDPOINT_IO_ERROR,
+                            "statusMessage" to (error.localizedMessage
+                                ?: "acceptConnection failed"),
                         ),
                     )
+                    emitError("acceptConnection failed: ${error.localizedMessage ?: "unknown"}")
                 }
         }
 
@@ -337,25 +458,31 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
             endpointId: String,
             resolution: ConnectionResolution,
         ) {
-            val isConnected = resolution.status.statusCode == ConnectionsStatusCodes.STATUS_OK
+            val status = resolution.status
+            val isConnected = status.statusCode == ConnectionsStatusCodes.STATUS_OK
             if (isConnected) {
                 connectedEndpointIds.add(endpointId)
+                clearEndpointState(endpointId)
+                connectedEndpointIds.add(endpointId)
+                if (activeRole == NearbyRole.CLIENT) {
+                    connectionsClient.stopDiscovery()
+                }
             } else {
-                connectedEndpointIds.remove(endpointId)
+                clearEndpointState(endpointId)
             }
             emitEvent(
                 mapOf(
                     "type" to "connection_result",
                     "endpointId" to endpointId,
                     "connected" to isConnected,
-                    "statusCode" to resolution.status.statusCode,
-                    "statusMessage" to resolution.status.statusMessage,
+                    "statusCode" to status.statusCode,
+                    "statusMessage" to status.statusMessage,
                 ),
             )
         }
 
         override fun onDisconnected(endpointId: String) {
-            connectedEndpointIds.remove(endpointId)
+            clearEndpointState(endpointId)
             emitEvent(
                 mapOf(
                     "type" to "endpoint_disconnected",
@@ -394,8 +521,6 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
 
     private fun emitEvent(event: Map<String, Any?>) {
         val sink = eventSink ?: return
-        mainHandler.post {
-            sink.success(event)
-        }
+        mainHandler.post { sink.success(event) }
     }
 }

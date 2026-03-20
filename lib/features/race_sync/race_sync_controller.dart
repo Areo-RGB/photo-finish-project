@@ -36,6 +36,7 @@ class RaceSyncController extends ChangeNotifier {
   bool _busy = false;
   bool _permissionsGranted = false;
   String? _errorText;
+  String? _lastConnectionStatus;
 
   RaceRole get role => _role;
   SessionState get sessionState => _sessionState;
@@ -46,6 +47,7 @@ class RaceSyncController extends ChangeNotifier {
   bool get busy => _busy;
   bool get permissionsGranted => _permissionsGranted;
   String? get errorText => _errorText;
+  String? get lastConnectionStatus => _lastConnectionStatus;
 
   Future<void> _loadLastRun() async {
     _lastRun = await _repository.loadLastRun();
@@ -82,10 +84,9 @@ class RaceSyncController extends ChangeNotifier {
       return;
     }
 
-    _role = RaceRole.host;
+    _resetForRoleSwitch(role: RaceRole.host);
     _sessionId = 'session-${DateTime.now().millisecondsSinceEpoch}';
     _sessionState = SessionState.initial();
-    _discovered.clear();
     notifyListeners();
 
     try {
@@ -107,8 +108,9 @@ class RaceSyncController extends ChangeNotifier {
       return;
     }
 
-    _role = RaceRole.client;
-    _discovered.clear();
+    _resetForRoleSwitch(role: RaceRole.client);
+    _sessionId = '';
+    _sessionState = SessionState.initial();
     notifyListeners();
 
     try {
@@ -173,6 +175,7 @@ class RaceSyncController extends ChangeNotifier {
 
     if (trigger.type == MotionTriggerType.start) {
       final startedAtEpochMs = trigger.triggerMicros ~/ 1000;
+      final sessionId = _ensureSessionId();
       _sessionState = SessionState(
         raceStarted: true,
         startedAtEpochMs: startedAtEpochMs,
@@ -185,7 +188,7 @@ class RaceSyncController extends ChangeNotifier {
       await _broadcast(
         RaceEventMessage(
           type: RaceEventType.raceStarted,
-          sessionId: _sessionId,
+          sessionId: sessionId,
           startedAtEpochMs: startedAtEpochMs,
         ),
       );
@@ -206,10 +209,11 @@ class RaceSyncController extends ChangeNotifier {
     _addLog('Split ${splitMicros.length}: ${elapsedMicros}us');
     notifyListeners();
 
+    final sessionId = _ensureSessionId();
     await _broadcast(
       RaceEventMessage(
         type: RaceEventType.raceSplit,
-        sessionId: _sessionId,
+        sessionId: sessionId,
         splitIndex: splitMicros.length,
         elapsedMicros: elapsedMicros,
       ),
@@ -248,21 +252,40 @@ class RaceSyncController extends ChangeNotifier {
         final id = event['endpointId']?.toString();
         if (id != null) {
           _discovered.remove(id);
+          _connectedEndpointIds.remove(id);
           _addLog('Endpoint lost: $id');
+          _lastConnectionStatus = 'Endpoint lost: $id';
           notifyListeners();
         }
         break;
       case 'connection_result':
-        final endpointId = event['endpointId']?.toString();
-        final connected = event['connected'] == true;
-        if (endpointId != null) {
-          if (connected) {
-            _connectedEndpointIds.add(endpointId);
-          } else {
-            _connectedEndpointIds.remove(endpointId);
-          }
+        final connection = NearbyConnectionResultEvent.tryParse(event);
+        if (connection == null) {
+          _addLog('Ignored malformed connection_result event: $event');
+          break;
         }
-        _addLog('Connection event: $event');
+        final endpointId = connection.endpointId;
+        if (connection.connected) {
+          final wasNew = _connectedEndpointIds.add(endpointId);
+          _discovered.remove(endpointId);
+          _lastConnectionStatus = 'Connected: $endpointId';
+          _addLog(
+            'Connection success: $endpointId'
+            '${_statusSuffix(connection.statusCode, connection.statusMessage)}',
+          );
+          if (_role == RaceRole.host && wasNew) {
+            unawaited(_syncConnectedEndpointWithRaceState(endpointId));
+          }
+        } else {
+          _connectedEndpointIds.remove(endpointId);
+          _discovered.remove(endpointId);
+          final status = _statusSuffix(
+            connection.statusCode,
+            connection.statusMessage,
+          );
+          _lastConnectionStatus = 'Connection failed: $endpointId$status';
+          _addLog('Connection failed: $endpointId$status');
+        }
         notifyListeners();
         break;
       case 'endpoint_disconnected':
@@ -270,6 +293,7 @@ class RaceSyncController extends ChangeNotifier {
         if (endpointId != null) {
           _connectedEndpointIds.remove(endpointId);
           _addLog('Endpoint disconnected: $endpointId');
+          _lastConnectionStatus = 'Endpoint disconnected: $endpointId';
           notifyListeners();
         }
         break;
@@ -286,6 +310,7 @@ class RaceSyncController extends ChangeNotifier {
         break;
       case 'error':
         _errorText = event['message']?.toString() ?? 'Unknown Nearby error';
+        _lastConnectionStatus = _errorText;
         _addLog('Error: $_errorText');
         notifyListeners();
         break;
@@ -334,14 +359,87 @@ class RaceSyncController extends ChangeNotifier {
     final payload = message.toJsonString();
     for (final endpointId in _connectedEndpointIds) {
       try {
-        await _nearbyBridge.sendBytes(
-          endpointId: endpointId,
-          messageJson: payload,
-        );
+        await _sendPayload(endpointId: endpointId, payload: payload);
       } catch (error) {
         _addLog('Broadcast failed to $endpointId: $error');
       }
     }
+  }
+
+  Future<void> _syncConnectedEndpointWithRaceState(String endpointId) async {
+    if (!_sessionState.raceStarted || _sessionState.startedAtEpochMs == null) {
+      return;
+    }
+    final sessionId = _ensureSessionId();
+    await _sendEventToEndpoint(
+      endpointId: endpointId,
+      message: RaceEventMessage(
+        type: RaceEventType.raceStarted,
+        sessionId: sessionId,
+        startedAtEpochMs: _sessionState.startedAtEpochMs,
+      ),
+    );
+    for (final entry in _sessionState.splitMicros.asMap().entries) {
+      await _sendEventToEndpoint(
+        endpointId: endpointId,
+        message: RaceEventMessage(
+          type: RaceEventType.raceSplit,
+          sessionId: sessionId,
+          splitIndex: entry.key + 1,
+          elapsedMicros: entry.value,
+        ),
+      );
+    }
+  }
+
+  Future<void> _sendEventToEndpoint({
+    required String endpointId,
+    required RaceEventMessage message,
+  }) {
+    return _sendPayload(
+      endpointId: endpointId,
+      payload: message.toJsonString(),
+    );
+  }
+
+  Future<void> _sendPayload({
+    required String endpointId,
+    required String payload,
+  }) {
+    return _nearbyBridge.sendBytes(
+      endpointId: endpointId,
+      messageJson: payload,
+    );
+  }
+
+  String _ensureSessionId() {
+    if (_sessionId.isEmpty) {
+      _sessionId = 'session-${DateTime.now().millisecondsSinceEpoch}';
+    }
+    return _sessionId;
+  }
+
+  void _resetForRoleSwitch({required RaceRole role}) {
+    _role = role;
+    _discovered.clear();
+    _connectedEndpointIds.clear();
+    _errorText = null;
+    _lastConnectionStatus = null;
+  }
+
+  String _statusSuffix(int? statusCode, String? statusMessage) {
+    final hasCode = statusCode != null;
+    final hasMessage = statusMessage != null && statusMessage.isNotEmpty;
+    if (!hasCode && !hasMessage) {
+      return '';
+    }
+    if (hasCode && hasMessage) {
+      return ' (code $statusCode: $statusMessage)';
+    }
+    if (hasCode) {
+      return ' (code $statusCode)';
+    }
+    return ' ($statusMessage)';
   }
 
   Future<void> _persistRun() async {

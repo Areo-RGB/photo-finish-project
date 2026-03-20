@@ -1,5 +1,39 @@
 import 'package:flutter/services.dart';
 
+class NearbyConnectionResultEvent {
+  const NearbyConnectionResultEvent({
+    required this.endpointId,
+    required this.connected,
+    this.statusCode,
+    this.statusMessage,
+  });
+
+  final String endpointId;
+  final bool connected;
+  final int? statusCode;
+  final String? statusMessage;
+
+  static NearbyConnectionResultEvent? tryParse(Map<String, dynamic> event) {
+    if (event['type'] != 'connection_result') {
+      return null;
+    }
+    final endpointId = event['endpointId']?.toString();
+    if (endpointId == null || endpointId.isEmpty) {
+      return null;
+    }
+    final connected = event['connected'];
+    if (connected is! bool) {
+      return null;
+    }
+    return NearbyConnectionResultEvent(
+      endpointId: endpointId,
+      connected: connected,
+      statusCode: _readInt(event['statusCode']),
+      statusMessage: event['statusMessage']?.toString(),
+    );
+  }
+}
+
 class NearbyEndpoint {
   const NearbyEndpoint({
     required this.id,
@@ -96,4 +130,17 @@ class NearbyBridge {
   Future<void> stopAll() {
     return _methodChannel.invokeMethod<void>('stopAll');
   }
+}
+
+int? _readInt(dynamic value) {
+  if (value is int) {
+    return value;
+  }
+  if (value is num) {
+    return value.toInt();
+  }
+  if (value is String) {
+    return int.tryParse(value);
+  }
+  return null;
 }

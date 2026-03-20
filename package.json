@@ -1,0 +1,8 @@
+{
+  "name": "sprint-sync-tools",
+  "private": true,
+  "scripts": {
+    "install:debug:devices": "node scripts/install-debug-apk.mjs",
+    "install:debug:devices:build": "flutter build apk --debug && node scripts/install-debug-apk.mjs"
+  }
+}
