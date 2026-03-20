@@ -59,7 +59,7 @@ class MotionDetectionConfig {
 
   factory MotionDetectionConfig.defaults() {
     return const MotionDetectionConfig(
-      threshold: 0.04,
+      threshold: 0.006,
       roiCenterX: 0.5,
       roiWidth: 0.12,
       cooldownMs: 900,
@@ -108,7 +108,7 @@ class MotionDetectionConfig {
         defaults.processEveryNFrames;
 
     return MotionDetectionConfig(
-      threshold: _clampDouble(parsedThreshold, 0.02, 0.30),
+      threshold: _clampDouble(parsedThreshold, 0.001, 0.08),
       roiCenterX: _clampDouble(parsedRoiCenter, 0.20, 0.80),
       roiWidth: _clampDouble(parsedRoiWidth, 0.05, 0.40),
       cooldownMs: parsedCooldown.clamp(300, 2000),

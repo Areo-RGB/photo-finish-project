@@ -82,8 +82,8 @@ class _MotionDetectionScreenState extends State<MotionDetectionScreen>
                   Slider(
                     key: const ValueKey<String>('threshold_slider'),
                     value: config.threshold,
-                    min: 0.02,
-                    max: 0.30,
+                    min: 0.001,
+                    max: 0.08,
                     onChanged: (value) =>
                         widget.controller.updateThreshold(value),
                   ),
@@ -133,6 +133,10 @@ class _MotionDetectionScreenState extends State<MotionDetectionScreen>
                     'Effective: ${stats?.effectiveScore.toStringAsFixed(4) ?? '-'}',
                   ),
                   Text('Timestamp: ${stats?.timestampMicros ?? '-'}'),
+                  Text(
+                    'Frames: ${widget.controller.processedFrameCount}'
+                    '/${widget.controller.streamFrameCount}',
+                  ),
                   const Divider(),
                   const Align(
                     alignment: Alignment.centerLeft,
