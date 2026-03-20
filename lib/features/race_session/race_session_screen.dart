@@ -88,6 +88,18 @@ class RaceSessionScreen extends StatelessWidget {
                           icon: const Icon(Icons.arrow_forward, size: 18),
                           label: const Text('Next'),
                         ),
+                      // Web Demo Button - Skip network setup
+                      FilledButton.icon(
+                        onPressed: () {
+                          // Manually set up demo state for web
+                          controller.forceWebDemoMode();
+                        },
+                        icon: const Icon(Icons.web, size: 18),
+                        label: const Text('Web Demo'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                        ),
+                      ),
                     ],
                   ),
                 ],
