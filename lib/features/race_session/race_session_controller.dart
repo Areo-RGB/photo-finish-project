@@ -171,9 +171,20 @@ class RaceSessionController extends ChangeNotifier {
   void forceWebDemoMode() {
     _permissionsGranted = true;
     _networkRole = SessionNetworkRole.host;
+    
+    // Assign start role to local device
     _devices[_localDeviceId] = _devices[_localDeviceId]!.copyWith(
       role: SessionDeviceRole.start,
     );
+    
+    // Add a virtual "stop" device for web demo to satisfy role requirements
+    _devices['virtual-stop-device'] = const SessionDevice(
+      id: 'virtual-stop-device',
+      name: 'Virtual Stop Device',
+      role: SessionDeviceRole.stop,
+      isLocal: false,
+    );
+    
     _stage = SessionStage.lobby;
     _errorText = null;
     notifyListeners();
