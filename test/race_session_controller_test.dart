@@ -239,6 +239,8 @@ void main() {
     'host applies client trigger requests using canonical host time',
     () async {
       final fixture = _ControllerFixture.create();
+      final canonicalHostTriggerMicros =
+          DateTime.now().microsecondsSinceEpoch - 1000;
       await fixture.controller.createLobby();
       fixture.bridge.emitEvent(<String, dynamic>{
         'type': 'connection_result',
@@ -255,12 +257,15 @@ void main() {
         'message': SessionTriggerRequestMessage(
           role: SessionDeviceRole.start,
           deviceTriggerMicros: 111000,
-          hostTriggerMicros: 222000,
+          hostTriggerMicros: canonicalHostTriggerMicros,
         ).toJsonString(),
       });
       await _flushEvents();
 
-      expect(fixture.controller.timeline.startedAtEpochMs, 222);
+      expect(
+        fixture.controller.timeline.startedAtEpochMs,
+        canonicalHostTriggerMicros ~/ 1000,
+      );
 
       fixture.dispose();
     },

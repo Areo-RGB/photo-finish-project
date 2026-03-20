@@ -15,7 +15,7 @@ void main() {
   test('start trigger initializes run and elapsed ticker', () async {
     final controller = MotionDetectionController(repository: LocalRepository());
     await Future<void>.delayed(const Duration(milliseconds: 1));
-    final startMicros = DateTime.now().microsecondsSinceEpoch;
+    final startMicros = _nowMicrosRoundedToMs();
 
     controller.ingestTrigger(
       MotionTriggerEvent(
@@ -49,7 +49,7 @@ void main() {
         repository: LocalRepository(),
       );
       await Future<void>.delayed(const Duration(milliseconds: 1));
-      final startMicros = DateTime.now().microsecondsSinceEpoch;
+      final startMicros = _nowMicrosRoundedToMs();
       final stopMicros = startMicros + 750000;
 
       controller.ingestTrigger(
@@ -93,7 +93,7 @@ void main() {
         repository: LocalRepository(),
       );
       await Future<void>.delayed(const Duration(milliseconds: 1));
-      final startMicros = DateTime.now().microsecondsSinceEpoch;
+      final startMicros = _nowMicrosRoundedToMs();
 
       controller.ingestTrigger(
         MotionTriggerEvent(
@@ -130,7 +130,7 @@ void main() {
   test('manual reset clears active run, splits, and trigger history', () async {
     final controller = MotionDetectionController(repository: LocalRepository());
     await Future<void>.delayed(const Duration(milliseconds: 1));
-    final startMicros = DateTime.now().microsecondsSinceEpoch;
+    final startMicros = _nowMicrosRoundedToMs();
 
     controller.ingestTrigger(
       MotionTriggerEvent(
@@ -183,7 +183,7 @@ void main() {
   test('new START after STOP begins a fresh run', () async {
     final controller = MotionDetectionController(repository: LocalRepository());
     await Future<void>.delayed(const Duration(milliseconds: 1));
-    final firstStartMicros = DateTime.now().microsecondsSinceEpoch;
+    final firstStartMicros = _nowMicrosRoundedToMs();
     final secondStartMicros = firstStartMicros + 1100000;
 
     controller.ingestTrigger(
@@ -221,7 +221,7 @@ void main() {
   test('detected pulses start a run and then append splits', () async {
     final controller = MotionDetectionController(repository: LocalRepository());
     await Future<void>.delayed(const Duration(milliseconds: 1));
-    final startMicros = DateTime.now().microsecondsSinceEpoch;
+    final startMicros = _nowMicrosRoundedToMs();
 
     controller.ingestDetectedPulse(
       MotionTriggerEvent(
@@ -275,4 +275,9 @@ void main() {
 
     controller.dispose();
   });
+}
+
+int _nowMicrosRoundedToMs() {
+  final nowMicros = DateTime.now().microsecondsSinceEpoch;
+  return (nowMicros ~/ 1000) * 1000;
 }
