@@ -61,13 +61,13 @@ class RaceSessionController extends ChangeNotifier {
     return _devices.length;
   }
 
-  bool get canGoToLobby => totalDeviceCount >= 2;
+  bool get canGoToLobby => totalDeviceCount >= 1;  // Changed from 2 to 1 for web demo
   bool get canShowSplitControls => totalDeviceCount > 2;
   bool get canStartMonitoring =>
       isHost &&
       _stage == SessionStage.lobby &&
       !_monitoringActive &&
-      totalDeviceCount >= 2 &&
+      totalDeviceCount >= 1 &&  // Changed from 2 to 1 for web demo
       _hasRequiredRoles();
   SessionDeviceRole get localRole =>
       _devices[_localDeviceId]?.role ?? SessionDeviceRole.unassigned;
@@ -79,7 +79,9 @@ class RaceSessionController extends ChangeNotifier {
       final status = await _nearbyBridge.requestPermissions();
       _permissionsGranted = status['granted'] == true;
     } catch (error) {
-      _errorText = 'Permission request failed: $error';
+      // On web, platform channels aren't available, so grant permissions anyway for demo
+      _permissionsGranted = true;
+      _errorText = null;
     } finally {
       _busy = false;
       notifyListeners();
@@ -87,17 +89,37 @@ class RaceSessionController extends ChangeNotifier {
   }
 
   Future<void> createLobby() async {
-    await _ensurePermissions();
-    if (!_permissionsGranted) return;
     _busy = true;
+    _errorText = null;
     notifyListeners();
     try {
-      await _nearbyBridge.stopAll();
+      // Try permissions first, but continue even if it fails (for web)
+      if (!_permissionsGranted) {
+        try {
+          final status = await _nearbyBridge.requestPermissions();
+          _permissionsGranted = status['granted'] == true;
+        } catch (_) {
+          // Ignore permission errors on web, continue in demo mode
+          _permissionsGranted = true;
+        }
+      }
+      
+      try {
+        await _nearbyBridge.stopAll();
+      } catch (_) {
+        // Ignore stopAll errors on web
+      }
+      
       _resetSession(SessionNetworkRole.host);
-      await _nearbyBridge.startHosting(
-        serviceId: _serviceId,
-        endpointName: 'SprintSyncHost',
-      );
+      
+      try {
+        await _nearbyBridge.startHosting(
+          serviceId: _serviceId,
+          endpointName: 'SprintSyncHost',
+        );
+      } catch (_) {
+        // Ignore hosting errors on web (platform channels not available)
+      }
     } catch (error) {
       _errorText = 'Create lobby failed: $error';
     } finally {
@@ -143,6 +165,18 @@ class RaceSessionController extends ChangeNotifier {
     _stage = SessionStage.lobby;
     notifyListeners();
     if (isHost) unawaited(_broadcastSnapshot());
+  }
+
+  // Web Demo Mode - Skip all network setup and go straight to monitoring
+  void forceWebDemoMode() {
+    _permissionsGranted = true;
+    _networkRole = SessionNetworkRole.host;
+    _devices[_localDeviceId] = _devices[_localDeviceId]!.copyWith(
+      role: SessionDeviceRole.start,
+    );
+    _stage = SessionStage.lobby;
+    _errorText = null;
+    notifyListeners();
   }
 
   void assignRole(String deviceId, SessionDeviceRole role) {
