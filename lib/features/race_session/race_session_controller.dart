@@ -8,7 +8,9 @@ import 'package:sprint_sync/features/motion_detection/motion_detection_models.da
 import 'package:sprint_sync/features/race_session/race_session_models.dart';
 
 class RaceSessionController extends ChangeNotifier {
-  static const int _maxClockSyncRttNanos = 400000000;
+  static const int _maxClockSyncRttNanos = 20000000;
+  static const int _clockSyncBurstCount = 10;
+  static const int _clockSyncBurstTimeoutNanos = 500000000;
   static const int _clockSyncStaleAfterNanos = 5000000000;
   static final Stopwatch _elapsedClock = Stopwatch()..start();
 
@@ -59,6 +61,9 @@ class RaceSessionController extends ChangeNotifier {
   int? _lastClockSyncElapsedNanos;
   int? _hostSensorMinusElapsedNanos;
   int? _lastClockSyncRequestNanos;
+  final Set<int> _pendingClockSyncRequestSendNanos = <int>{};
+  int? _clockSyncBurstStartedElapsedNanos;
+  int? _bestClockSyncBurstRttNanos;
   String? _errorText;
   SessionStage get stage => _stage;
   SessionNetworkRole get networkRole => _networkRole;
@@ -248,7 +253,7 @@ class RaceSessionController extends ChangeNotifier {
       );
       if (mappedHostSensorNanos == null) {
         _errorText =
-            'Trigger rejected: no valid clock lock (no sync, stale sync, or RTT > 400ms).';
+            'Trigger rejected: no valid clock lock (no sync, stale sync, or RTT > ${_maxClockSyncRttNanos ~/ 1000000}ms).';
         notifyListeners();
         return;
       }
@@ -488,10 +493,19 @@ class RaceSessionController extends ChangeNotifier {
     }
     final clockSyncResponse = SessionClockSyncResponseMessage.tryParse(raw);
     if (clockSyncResponse != null && isClient) {
+      if (!_pendingClockSyncRequestSendNanos.remove(
+        clockSyncResponse.clientSendElapsedNanos,
+      )) {
+        return;
+      }
       final clientReceiveElapsedNanos = _nowClockSyncElapsedNanos(
         requireSensorDomainIfMonitoring: true,
       );
       if (clientReceiveElapsedNanos == null) {
+        if (_pendingClockSyncRequestSendNanos.isEmpty) {
+          _clockSyncBurstStartedElapsedNanos = null;
+          _bestClockSyncBurstRttNanos = null;
+        }
         return;
       }
       _updateHostClockOffset(
@@ -499,6 +513,10 @@ class RaceSessionController extends ChangeNotifier {
         hostReceiveElapsedNanos: clockSyncResponse.hostReceiveElapsedNanos,
         clientReceiveElapsedNanos: clientReceiveElapsedNanos,
       );
+      if (_pendingClockSyncRequestSendNanos.isEmpty) {
+        _clockSyncBurstStartedElapsedNanos = null;
+        _bestClockSyncBurstRttNanos = null;
+      }
       return;
     }
     final triggerRequest = SessionTriggerRequestMessage.tryParse(raw);
@@ -525,19 +543,52 @@ class RaceSessionController extends ChangeNotifier {
     if (!isClient || _connectedEndpointIds.isEmpty) {
       return;
     }
-    final clientSendElapsedNanos = _nowClockSyncElapsedNanos(
+    final burstStartElapsedNanos = _nowClockSyncElapsedNanos(
       requireSensorDomainIfMonitoring: true,
     );
-    if (clientSendElapsedNanos == null) {
+    if (burstStartElapsedNanos == null) {
       return;
     }
+    if (_pendingClockSyncRequestSendNanos.isNotEmpty) {
+      final activeBurstStartedElapsedNanos = _clockSyncBurstStartedElapsedNanos;
+      final activeBurstAgeNanos = activeBurstStartedElapsedNanos == null
+          ? _clockSyncBurstTimeoutNanos + 1
+          : burstStartElapsedNanos - activeBurstStartedElapsedNanos;
+      if (activeBurstAgeNanos >= 0 &&
+          activeBurstAgeNanos <= _clockSyncBurstTimeoutNanos) {
+        return;
+      }
+      _pendingClockSyncRequestSendNanos.clear();
+      _bestClockSyncBurstRttNanos = null;
+    }
+    _clockSyncBurstStartedElapsedNanos = burstStartElapsedNanos;
+    _bestClockSyncBurstRttNanos = null;
     final endpointId = _connectedEndpointIds.first;
-    await _nearbyBridge.sendBytes(
-      endpointId: endpointId,
-      messageJson: SessionClockSyncRequestMessage(
-        clientSendElapsedNanos: clientSendElapsedNanos,
-      ).toJsonString(),
-    );
+    for (var i = 0; i < _clockSyncBurstCount; i += 1) {
+      final sampledClientSendElapsedNanos = i == 0
+          ? burstStartElapsedNanos
+          : _nowClockSyncElapsedNanos(requireSensorDomainIfMonitoring: true);
+      if (sampledClientSendElapsedNanos == null) {
+        break;
+      }
+      var uniqueClientSendElapsedNanos = sampledClientSendElapsedNanos;
+      while (_pendingClockSyncRequestSendNanos.contains(
+        uniqueClientSendElapsedNanos,
+      )) {
+        uniqueClientSendElapsedNanos += 1;
+      }
+      _pendingClockSyncRequestSendNanos.add(uniqueClientSendElapsedNanos);
+      await _nearbyBridge.sendBytes(
+        endpointId: endpointId,
+        messageJson: SessionClockSyncRequestMessage(
+          clientSendElapsedNanos: uniqueClientSendElapsedNanos,
+        ).toJsonString(),
+      );
+    }
+    if (_pendingClockSyncRequestSendNanos.isEmpty) {
+      _clockSyncBurstStartedElapsedNanos = null;
+      _bestClockSyncBurstRttNanos = null;
+    }
   }
 
   void _updateHostClockOffset({
@@ -546,8 +597,7 @@ class RaceSessionController extends ChangeNotifier {
     required int clientReceiveElapsedNanos,
   }) {
     if (clientReceiveElapsedNanos < clientSendElapsedNanos) {
-      _clearClockSyncLock();
-      _errorText = 'Clock sync rejected: receive time moved backwards.';
+      _errorText = 'Clock sync sample ignored: receive time moved backwards.';
       notifyListeners();
       return;
     }
@@ -555,25 +605,23 @@ class RaceSessionController extends ChangeNotifier {
       0,
       clientReceiveElapsedNanos - clientSendElapsedNanos,
     );
-    _hostClockRoundTripNanos = roundTripNanos;
     if (roundTripNanos > _maxClockSyncRttNanos) {
-      _hostMinusClientElapsedNanos = null;
-      _lastClockSyncElapsedNanos = null;
       _errorText =
-          'Clock sync rejected: RTT ${(roundTripNanos / 1000000).toStringAsFixed(1)}ms exceeds 400ms.';
+          'Clock sync sample ignored: RTT ${(roundTripNanos / 1000000).toStringAsFixed(1)}ms exceeds ${_maxClockSyncRttNanos ~/ 1000000}ms.';
       notifyListeners();
       return;
     }
+    final bestBurstRttNanos = _bestClockSyncBurstRttNanos;
+    if (bestBurstRttNanos != null && roundTripNanos >= bestBurstRttNanos) {
+      return;
+    }
+    _bestClockSyncBurstRttNanos = roundTripNanos;
     final estimatedClientAtHostReceiveElapsedNanos =
         clientSendElapsedNanos + (roundTripNanos ~/ 2);
     final sampleOffsetNanos =
         hostReceiveElapsedNanos - estimatedClientAtHostReceiveElapsedNanos;
-    if (_hostMinusClientElapsedNanos == null) {
-      _hostMinusClientElapsedNanos = sampleOffsetNanos;
-    } else {
-      _hostMinusClientElapsedNanos =
-          ((_hostMinusClientElapsedNanos! * 3) + sampleOffsetNanos) ~/ 4;
-    }
+    _hostMinusClientElapsedNanos = sampleOffsetNanos;
+    _hostClockRoundTripNanos = roundTripNanos;
     _lastClockSyncElapsedNanos = clientReceiveElapsedNanos;
     _errorText = null;
     if (isClient && _timeline.hasStarted) {
@@ -769,6 +817,9 @@ class RaceSessionController extends ChangeNotifier {
     _hostMinusClientElapsedNanos = null;
     _hostClockRoundTripNanos = null;
     _lastClockSyncElapsedNanos = null;
+    _pendingClockSyncRequestSendNanos.clear();
+    _clockSyncBurstStartedElapsedNanos = null;
+    _bestClockSyncBurstRttNanos = null;
   }
 
   @override

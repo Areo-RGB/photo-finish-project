@@ -127,8 +127,8 @@ void main() {
           )
           .whereType<SessionClockSyncRequestMessage>()
           .toList();
-      expect(syncRequests, isNotEmpty);
-      final syncRequest = syncRequests.last;
+      expect(syncRequests, hasLength(10));
+      final syncRequest = syncRequests.first;
       nowElapsedNanos = 1300000000;
       fixture.bridge.emitEvent(<String, dynamic>{
         'type': 'payload_received',
@@ -293,8 +293,8 @@ void main() {
           )
           .whereType<SessionClockSyncRequestMessage>()
           .toList();
-      expect(syncRequests, isNotEmpty);
-      final syncRequest = syncRequests.last;
+      expect(syncRequests, hasLength(10));
+      final syncRequest = syncRequests.first;
       nowElapsedNanos = 1300000000;
       fixture.bridge.emitEvent(<String, dynamic>{
         'type': 'payload_received',
@@ -420,8 +420,8 @@ void main() {
           )
           .whereType<SessionClockSyncRequestMessage>()
           .toList();
-      expect(syncRequests, isNotEmpty);
-      final syncRequest = syncRequests.last;
+      expect(syncRequests, hasLength(10));
+      final syncRequest = syncRequests.first;
       nowElapsedNanos = 1100000000;
       fixture.bridge.emitEvent(<String, dynamic>{
         'type': 'payload_received',
@@ -482,10 +482,95 @@ void main() {
     },
   );
 
+  test('client trigger is rejected when clock sync RTT exceeds 20ms', () async {
+    int nowElapsedNanos = 1000000000;
+    final fixture = _ControllerFixture.create(
+      nowElapsedNanos: () => nowElapsedNanos,
+    );
+    await fixture.controller.joinLobby();
+    fixture.bridge.emitEvent(<String, dynamic>{
+      'type': 'connection_result',
+      'endpointId': 'host-1',
+      'connected': true,
+    });
+    await _flushEvents();
+    fixture.nativeBridge.emitEvent(<String, dynamic>{
+      'type': 'native_state',
+      'hostSensorMinusElapsedNanos': 500000000,
+    });
+    fixture.bridge.emitEvent(<String, dynamic>{
+      'type': 'payload_received',
+      'endpointId': 'host-1',
+      'message': SessionSnapshotMessage(
+        stage: SessionStage.monitoring,
+        monitoringActive: true,
+        devices: const <SessionDevice>[
+          SessionDevice(
+            id: 'local-device',
+            name: 'Client',
+            role: SessionDeviceRole.start,
+            isLocal: false,
+          ),
+          SessionDevice(
+            id: 'host-1',
+            name: 'Host',
+            role: SessionDeviceRole.stop,
+            isLocal: false,
+          ),
+        ],
+        timeline: SessionRaceTimeline.idle(),
+        hostSensorMinusElapsedNanos: 120000000,
+        selfDeviceId: 'local-device',
+      ).toJsonString(),
+    });
+    await _flushEvents();
+    final syncRequests = fixture.bridge.sentPayloads
+        .map(
+          (payload) =>
+              SessionClockSyncRequestMessage.tryParse(payload.messageJson),
+        )
+        .whereType<SessionClockSyncRequestMessage>()
+        .toList();
+    expect(syncRequests, hasLength(10));
+
+    nowElapsedNanos = syncRequests.first.clientSendElapsedNanos + 30000000;
+    fixture.bridge.emitEvent(<String, dynamic>{
+      'type': 'payload_received',
+      'endpointId': 'host-1',
+      'message': SessionClockSyncResponseMessage(
+        clientSendElapsedNanos: syncRequests.first.clientSendElapsedNanos,
+        hostReceiveElapsedNanos: 5000000000,
+        hostSendElapsedNanos: 5000000010,
+      ).toJsonString(),
+    });
+    await _flushEvents();
+    fixture.bridge.sentPayloads.clear();
+
+    await fixture.controller.onLocalMotionPulse(
+      const MotionTriggerEvent(
+        triggerSensorNanos: 2000000000,
+        score: 0.1,
+        type: MotionTriggerType.start,
+        splitIndex: 0,
+      ),
+    );
+
+    final triggerRequests = fixture.bridge.sentPayloads
+        .map(
+          (payload) =>
+              SessionTriggerRequestMessage.tryParse(payload.messageJson),
+        )
+        .whereType<SessionTriggerRequestMessage>()
+        .toList();
+    expect(triggerRequests, isEmpty);
+    expect(fixture.controller.errorText, contains('RTT'));
+    fixture.dispose();
+  });
+
   test(
-    'client trigger is rejected when clock sync RTT exceeds 400ms',
+    'client uses the lowest RTT sample from a sync burst for trigger mapping',
     () async {
-      int nowElapsedNanos = 1000000000;
+      int nowElapsedNanos = 1200000000;
       final fixture = _ControllerFixture.create(
         nowElapsedNanos: () => nowElapsedNanos,
       );
@@ -496,10 +581,21 @@ void main() {
         'connected': true,
       });
       await _flushEvents();
+
       fixture.nativeBridge.emitEvent(<String, dynamic>{
         'type': 'native_state',
-        'hostSensorMinusElapsedNanos': 500000000,
+        'hostSensorMinusElapsedNanos': 700000000,
       });
+      fixture.nativeBridge.emitEvent(<String, dynamic>{
+        'type': 'native_frame_stats',
+        'frameSensorNanos': 2000000000,
+        'rawScore': 0.01,
+        'baseline': 0.01,
+        'effectiveScore': 0.0,
+      });
+      await _flushEvents();
+
+      fixture.bridge.sentPayloads.clear();
       fixture.bridge.emitEvent(<String, dynamic>{
         'type': 'payload_received',
         'endpointId': 'host-1',
@@ -527,16 +623,45 @@ void main() {
       });
       await _flushEvents();
 
-      nowElapsedNanos = 1600000000;
-      fixture.bridge.emitEvent(<String, dynamic>{
-        'type': 'payload_received',
-        'endpointId': 'host-1',
-        'message': const SessionClockSyncResponseMessage(
-          clientSendElapsedNanos: 1000000000,
-          hostReceiveElapsedNanos: 5000000000,
-          hostSendElapsedNanos: 5000000010,
-        ).toJsonString(),
-      });
+      final syncRequests = fixture.bridge.sentPayloads
+          .map(
+            (payload) =>
+                SessionClockSyncRequestMessage.tryParse(payload.messageJson),
+          )
+          .whereType<SessionClockSyncRequestMessage>()
+          .toList();
+      expect(syncRequests, hasLength(10));
+
+      const bestSampleIndex = 3;
+      const bestRttNanos = 8000000;
+      final bestRequest = syncRequests[bestSampleIndex];
+      final expectedOffsetNanos =
+          5000000000 -
+          (bestRequest.clientSendElapsedNanos + (bestRttNanos ~/ 2));
+      final expectedMappedHostSensorNanos =
+          (2000000000 - 700000000) + expectedOffsetNanos + 120000000;
+
+      for (var i = 0; i < syncRequests.length; i += 1) {
+        final request = syncRequests[i];
+        final rttNanos = i == bestSampleIndex ? bestRttNanos : 30000000;
+        fixture.nativeBridge.emitEvent(<String, dynamic>{
+          'type': 'native_frame_stats',
+          'frameSensorNanos':
+              700000000 + request.clientSendElapsedNanos + rttNanos,
+          'rawScore': 0.01,
+          'baseline': 0.01,
+          'effectiveScore': 0.0,
+        });
+        fixture.bridge.emitEvent(<String, dynamic>{
+          'type': 'payload_received',
+          'endpointId': 'host-1',
+          'message': SessionClockSyncResponseMessage(
+            clientSendElapsedNanos: request.clientSendElapsedNanos,
+            hostReceiveElapsedNanos: 5000000000,
+            hostSendElapsedNanos: 5000000010,
+          ).toJsonString(),
+        });
+      }
       await _flushEvents();
       fixture.bridge.sentPayloads.clear();
 
@@ -556,8 +681,11 @@ void main() {
           )
           .whereType<SessionTriggerRequestMessage>()
           .toList();
-      expect(triggerRequests, isEmpty);
-      expect(fixture.controller.errorText, contains('RTT'));
+      expect(triggerRequests, isNotEmpty);
+      expect(
+        triggerRequests.last.mappedHostSensorNanos,
+        expectedMappedHostSensorNanos,
+      );
       fixture.dispose();
     },
   );
