@@ -8,15 +8,25 @@ import 'package:sprint_sync/features/motion_detection/motion_detection_models.da
 import 'package:sprint_sync/features/race_session/race_session_models.dart';
 
 class RaceSessionController extends ChangeNotifier {
+  static const int _maxClockSyncRttNanos = 400000000;
+  static const int _clockSyncStaleAfterNanos = 5000000000;
+  static final Stopwatch _elapsedClock = Stopwatch()..start();
+
+  static int _defaultElapsedNanos() {
+    return _elapsedClock.elapsedMicroseconds * 1000;
+  }
+
   RaceSessionController({
     required NearbyBridge nearbyBridge,
     required MotionDetectionController motionController,
     Future<void> Function()? startMonitoringAction,
     Future<void> Function()? stopMonitoringAction,
+    int Function()? nowElapsedNanos,
   }) : _nearbyBridge = nearbyBridge,
        _motionController = motionController,
        _startMonitoringAction = startMonitoringAction,
-       _stopMonitoringAction = stopMonitoringAction {
+       _stopMonitoringAction = stopMonitoringAction,
+       _nowElapsedNanos = nowElapsedNanos ?? _defaultElapsedNanos {
     _eventsSubscription = _nearbyBridge.events.listen(_onNearbyEvent);
     _devices[_localHostDeviceId] = const SessionDevice(
       id: _localHostDeviceId,
@@ -31,6 +41,7 @@ class RaceSessionController extends ChangeNotifier {
   final MotionDetectionController _motionController;
   final Future<void> Function()? _startMonitoringAction;
   final Future<void> Function()? _stopMonitoringAction;
+  final int Function() _nowElapsedNanos;
   final Map<String, NearbyEndpoint> _discovered = <String, NearbyEndpoint>{};
   final Set<String> _connectedEndpointIds = <String>{};
   final Map<String, SessionDevice> _devices = <String, SessionDevice>{};
@@ -42,6 +53,10 @@ class RaceSessionController extends ChangeNotifier {
   bool _busy = false;
   bool _permissionsGranted = false;
   bool _monitoringActive = false;
+  int? _hostMinusClientElapsedNanos;
+  int? _hostClockRoundTripNanos;
+  int? _lastClockSyncElapsedNanos;
+  int? _hostSensorMinusElapsedNanos;
   String? _errorText;
   SessionStage get stage => _stage;
   SessionNetworkRole get networkRole => _networkRole;
@@ -206,7 +221,7 @@ class RaceSessionController extends ChangeNotifier {
     if (role == SessionDeviceRole.split && !canShowSplitControls) return;
     await _applyRoleEvent(
       role: role,
-      triggerMicros: DateTime.now().microsecondsSinceEpoch,
+      triggerSensorNanos: _estimateLocalSensorNanosNow(),
     );
   }
 
@@ -219,18 +234,28 @@ class RaceSessionController extends ChangeNotifier {
     if (isHost) {
       await _applyRoleEvent(
         role: localRole,
-        triggerMicros: trigger.triggerMicros,
+        triggerSensorNanos: trigger.triggerSensorNanos,
       );
       return;
     }
     if (isClient &&
         _connectedEndpointIds.isNotEmpty &&
         localRole != SessionDeviceRole.unassigned) {
+      final mappedHostSensorNanos = _mapClientSensorToHostSensor(
+        trigger.triggerSensorNanos,
+      );
+      if (mappedHostSensorNanos == null) {
+        _errorText =
+            'Trigger rejected: no valid clock lock (no sync, stale sync, or RTT > 400ms).';
+        notifyListeners();
+        return;
+      }
       await _nearbyBridge.sendBytes(
         endpointId: _connectedEndpointIds.first,
         messageJson: SessionTriggerRequestMessage(
           role: localRole,
-          triggerMicros: trigger.triggerMicros,
+          triggerSensorNanos: trigger.triggerSensorNanos,
+          mappedHostSensorNanos: mappedHostSensorNanos,
         ).toJsonString(),
       );
     }
@@ -238,21 +263,21 @@ class RaceSessionController extends ChangeNotifier {
 
   Future<void> _applyRoleEvent({
     required SessionDeviceRole role,
-    required int triggerMicros,
+    required int triggerSensorNanos,
   }) async {
     if (role == SessionDeviceRole.unassigned) return;
     if (role == SessionDeviceRole.split && !canShowSplitControls) return;
-    final startedAt = _timeline.startedAtEpochMs;
+    final startedSensorNanos = _timeline.startedSensorNanos;
     if (role == SessionDeviceRole.start) {
       if (_timeline.hasStarted) return;
       _timeline = _timeline.copyWith(
-        startedAtEpochMs: triggerMicros ~/ 1000,
-        splitMicros: <int>[],
-        clearStopElapsed: true,
+        startedSensorNanos: triggerSensorNanos,
+        splitElapsedNanos: <int>[],
+        clearStopElapsedNanos: true,
       );
       _motionController.ingestTrigger(
         MotionTriggerEvent(
-          triggerMicros: triggerMicros,
+          triggerSensorNanos: triggerSensorNanos,
           score: 0,
           type: MotionTriggerType.start,
           splitIndex: 0,
@@ -260,27 +285,27 @@ class RaceSessionController extends ChangeNotifier {
         forwardToSync: false,
       );
     } else if (role == SessionDeviceRole.split) {
-      if (!_timeline.isRunning || startedAt == null) return;
-      final elapsedMicros = math.max(0, triggerMicros - (startedAt * 1000));
+      if (!_timeline.isRunning || startedSensorNanos == null) return;
+      final elapsedNanos = math.max(0, triggerSensorNanos - startedSensorNanos);
       _timeline = _timeline.copyWith(
-        splitMicros: <int>[..._timeline.splitMicros, elapsedMicros],
+        splitElapsedNanos: <int>[..._timeline.splitElapsedNanos, elapsedNanos],
       );
       _motionController.ingestTrigger(
         MotionTriggerEvent(
-          triggerMicros: triggerMicros,
+          triggerSensorNanos: triggerSensorNanos,
           score: 0,
           type: MotionTriggerType.split,
-          splitIndex: _timeline.splitMicros.length,
+          splitIndex: _timeline.splitElapsedNanos.length,
         ),
         forwardToSync: false,
       );
     } else if (role == SessionDeviceRole.stop) {
-      if (!_timeline.isRunning || startedAt == null) return;
-      final elapsedMicros = math.max(0, triggerMicros - (startedAt * 1000));
-      _timeline = _timeline.copyWith(stopElapsedMicros: elapsedMicros);
+      if (!_timeline.isRunning || startedSensorNanos == null) return;
+      final elapsedNanos = math.max(0, triggerSensorNanos - startedSensorNanos);
+      _timeline = _timeline.copyWith(stopElapsedNanos: elapsedNanos);
       _motionController.ingestTrigger(
         MotionTriggerEvent(
-          triggerMicros: triggerMicros,
+          triggerSensorNanos: triggerSensorNanos,
           score: 0,
           type: MotionTriggerType.stop,
           splitIndex: 0,
@@ -331,10 +356,18 @@ class RaceSessionController extends ChangeNotifier {
             role: SessionDeviceRole.unassigned,
             isLocal: false,
           );
+        } else if (isClient) {
+          unawaited(_requestClockSync());
         }
       } else {
         _connectedEndpointIds.remove(connection.endpointId);
         _devices.remove(connection.endpointId);
+        if (_connectedEndpointIds.isEmpty) {
+          _hostMinusClientElapsedNanos = null;
+          _hostClockRoundTripNanos = null;
+          _lastClockSyncElapsedNanos = null;
+          _hostSensorMinusElapsedNanos = null;
+        }
       }
       notifyListeners();
       if (isHost) unawaited(_broadcastSnapshot());
@@ -368,6 +401,8 @@ class RaceSessionController extends ChangeNotifier {
       _stage = snapshot.stage;
       _monitoringActive = snapshot.monitoringActive;
       _timeline = snapshot.timeline;
+      _hostSensorMinusElapsedNanos =
+          snapshot.hostSensorMinusElapsedNanos ?? _hostSensorMinusElapsedNanos;
       _localDeviceId = snapshot.selfDeviceId ?? _localDeviceId;
       _devices
         ..clear()
@@ -384,6 +419,7 @@ class RaceSessionController extends ChangeNotifier {
           await _motionController.initializeCamera();
           await _motionController.startDetection();
         }
+        unawaited(_requestClockSync());
       } else if (wasMonitoring && !_monitoringActive) {
         if (_stopMonitoringAction != null) {
           await _stopMonitoringAction();
@@ -392,30 +428,162 @@ class RaceSessionController extends ChangeNotifier {
         }
       }
       final timelineChanged =
-          previousTimeline.startedAtEpochMs != _timeline.startedAtEpochMs ||
-          previousTimeline.stopElapsedMicros != _timeline.stopElapsedMicros ||
-          !listEquals(previousTimeline.splitMicros, _timeline.splitMicros);
+          previousTimeline.startedSensorNanos != _timeline.startedSensorNanos ||
+          previousTimeline.stopElapsedNanos != _timeline.stopElapsedNanos ||
+          !listEquals(
+            previousTimeline.splitElapsedNanos,
+            _timeline.splitElapsedNanos,
+          );
       if (timelineChanged) {
         syncMotionControllerFromTimeline(_motionController, _timeline);
       }
       notifyListeners();
       return;
     }
+    final clockSyncRequest = SessionClockSyncRequestMessage.tryParse(raw);
+    if (clockSyncRequest != null && isHost && endpointId != null) {
+      final hostReceiveElapsedNanos = _nowElapsedNanos();
+      final hostSendElapsedNanos = _nowElapsedNanos();
+      await _nearbyBridge.sendBytes(
+        endpointId: endpointId,
+        messageJson: SessionClockSyncResponseMessage(
+          clientSendElapsedNanos: clockSyncRequest.clientSendElapsedNanos,
+          hostReceiveElapsedNanos: hostReceiveElapsedNanos,
+          hostSendElapsedNanos: hostSendElapsedNanos,
+        ).toJsonString(),
+      );
+      return;
+    }
+    final clockSyncResponse = SessionClockSyncResponseMessage.tryParse(raw);
+    if (clockSyncResponse != null && isClient) {
+      final clientReceiveElapsedNanos = _nowElapsedNanos();
+      _updateHostClockOffset(
+        clientSendElapsedNanos: clockSyncResponse.clientSendElapsedNanos,
+        hostReceiveElapsedNanos: clockSyncResponse.hostReceiveElapsedNanos,
+        clientReceiveElapsedNanos: clientReceiveElapsedNanos,
+      );
+      return;
+    }
     final triggerRequest = SessionTriggerRequestMessage.tryParse(raw);
     if (triggerRequest != null && isHost && endpointId != null) {
       final role = _devices[endpointId]?.role ?? SessionDeviceRole.unassigned;
       if (role == triggerRequest.role) {
+        final mappedHostSensorNanos = triggerRequest.mappedHostSensorNanos;
+        if (mappedHostSensorNanos == null) {
+          _errorText =
+              'Rejected trigger from $endpointId: missing mappedHostSensorNanos.';
+          notifyListeners();
+          return;
+        }
         await _applyRoleEvent(
           role: role,
-          triggerMicros: triggerRequest.triggerMicros,
+          triggerSensorNanos: mappedHostSensorNanos,
         );
       }
+      return;
     }
+  }
+
+  Future<void> _requestClockSync() async {
+    if (!isClient || _connectedEndpointIds.isEmpty) {
+      return;
+    }
+    final endpointId = _connectedEndpointIds.first;
+    await _nearbyBridge.sendBytes(
+      endpointId: endpointId,
+      messageJson: SessionClockSyncRequestMessage(
+        clientSendElapsedNanos: _nowElapsedNanos(),
+      ).toJsonString(),
+    );
+  }
+
+  void _updateHostClockOffset({
+    required int clientSendElapsedNanos,
+    required int hostReceiveElapsedNanos,
+    required int clientReceiveElapsedNanos,
+  }) {
+    final roundTripNanos = math.max(
+      0,
+      clientReceiveElapsedNanos - clientSendElapsedNanos,
+    );
+    _hostClockRoundTripNanos = roundTripNanos;
+    if (roundTripNanos > _maxClockSyncRttNanos) {
+      _hostMinusClientElapsedNanos = null;
+      _lastClockSyncElapsedNanos = null;
+      _errorText =
+          'Clock sync rejected: RTT ${(roundTripNanos / 1000000).toStringAsFixed(1)}ms exceeds 400ms.';
+      notifyListeners();
+      return;
+    }
+    final estimatedClientAtHostReceiveElapsedNanos =
+        clientSendElapsedNanos + (roundTripNanos ~/ 2);
+    final sampleOffsetNanos =
+        hostReceiveElapsedNanos - estimatedClientAtHostReceiveElapsedNanos;
+    if (_hostMinusClientElapsedNanos == null) {
+      _hostMinusClientElapsedNanos = sampleOffsetNanos;
+    } else {
+      _hostMinusClientElapsedNanos =
+          ((_hostMinusClientElapsedNanos! * 3) + sampleOffsetNanos) ~/ 4;
+    }
+    _lastClockSyncElapsedNanos = clientReceiveElapsedNanos;
+    _errorText = null;
+  }
+
+  int? _mapClientSensorToHostSensor(int clientSensorNanos) {
+    if (!_isClockLockValid()) {
+      return null;
+    }
+    final clientSensorMinusElapsedNanos =
+        _motionController.sensorMinusElapsedNanos;
+    final hostMinusClientElapsedNanos = _hostMinusClientElapsedNanos;
+    final hostSensorMinusElapsedNanos = _hostSensorMinusElapsedNanos;
+    if (clientSensorMinusElapsedNanos == null ||
+        hostMinusClientElapsedNanos == null ||
+        hostSensorMinusElapsedNanos == null) {
+      return null;
+    }
+    final clientElapsedNanos =
+        clientSensorNanos - clientSensorMinusElapsedNanos;
+    final hostElapsedNanos = clientElapsedNanos + hostMinusClientElapsedNanos;
+    return hostElapsedNanos + hostSensorMinusElapsedNanos;
+  }
+
+  bool _isClockLockValid() {
+    final offset = _hostMinusClientElapsedNanos;
+    final roundTripNanos = _hostClockRoundTripNanos;
+    final lastSyncElapsedNanos = _lastClockSyncElapsedNanos;
+    if (offset == null ||
+        roundTripNanos == null ||
+        lastSyncElapsedNanos == null) {
+      return false;
+    }
+    if (roundTripNanos > _maxClockSyncRttNanos) {
+      return false;
+    }
+    final ageNanos = _nowElapsedNanos() - lastSyncElapsedNanos;
+    if (ageNanos > _clockSyncStaleAfterNanos) {
+      return false;
+    }
+    if (_motionController.sensorMinusElapsedNanos == null) {
+      return false;
+    }
+    return _hostSensorMinusElapsedNanos != null;
+  }
+
+  int _estimateLocalSensorNanosNow() {
+    final sensorMinusElapsedNanos = _motionController.sensorMinusElapsedNanos;
+    final nowElapsedNanos = _nowElapsedNanos();
+    if (sensorMinusElapsedNanos == null) {
+      return nowElapsedNanos;
+    }
+    return nowElapsedNanos + sensorMinusElapsedNanos;
   }
 
   Future<void> _broadcastSnapshot() async {
     if (!isHost) return;
     final deviceSnapshot = _devices.values.toList();
+    final hostSensorMinusElapsedNanos =
+        _motionController.sensorMinusElapsedNanos;
     for (final endpointId in _connectedEndpointIds.toList()) {
       await _nearbyBridge.sendBytes(
         endpointId: endpointId,
@@ -424,6 +592,7 @@ class RaceSessionController extends ChangeNotifier {
           monitoringActive: _monitoringActive,
           devices: deviceSnapshot,
           timeline: _timeline,
+          hostSensorMinusElapsedNanos: hostSensorMinusElapsedNanos,
           selfDeviceId: endpointId,
         ).toJsonString(),
       );
@@ -453,6 +622,10 @@ class RaceSessionController extends ChangeNotifier {
     _stage = SessionStage.setup;
     _timeline = SessionRaceTimeline.idle();
     _monitoringActive = false;
+    _hostMinusClientElapsedNanos = null;
+    _hostClockRoundTripNanos = null;
+    _lastClockSyncElapsedNanos = null;
+    _hostSensorMinusElapsedNanos = null;
     _discovered.clear();
     _connectedEndpointIds.clear();
     _devices

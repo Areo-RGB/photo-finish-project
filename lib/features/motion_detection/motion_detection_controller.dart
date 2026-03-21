@@ -1,66 +1,62 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:sprint_sync/core/models/app_models.dart';
 import 'package:sprint_sync/core/repositories/local_repository.dart';
+import 'package:sprint_sync/core/services/native_sensor_bridge.dart';
 import 'package:sprint_sync/features/motion_detection/motion_detection_models.dart';
 
 class MotionDetectionController extends ChangeNotifier {
   MotionDetectionController({
     required LocalRepository repository,
+    NativeSensorBridge? nativeSensorBridge,
     void Function(MotionTriggerEvent event)? onTrigger,
   }) : _repository = repository,
+       _nativeSensorBridge = nativeSensorBridge ?? NativeSensorBridge(),
        _onTrigger = onTrigger {
-    _engine = MotionDetectionEngine(config: _config);
+    _nativeEventsSubscription = _nativeSensorBridge.events.listen(
+      _onNativeEvent,
+    );
     unawaited(_loadInitialState());
   }
 
   final LocalRepository _repository;
+  final NativeSensorBridge _nativeSensorBridge;
   final void Function(MotionTriggerEvent event)? _onTrigger;
 
   MotionDetectionConfig _config = MotionDetectionConfig.defaults();
-  late MotionDetectionEngine _engine;
-  CameraController? _cameraController;
-
   MotionFrameStats? _latestStats;
   final List<MotionTriggerEvent> _triggerHistory = <MotionTriggerEvent>[];
-
   MotionRunSnapshot _runSnapshot = MotionRunSnapshot.ready();
   LastRunResult? _lastRun;
-  Timer? _runTicker;
+  StreamSubscription<Map<String, dynamic>>? _nativeEventsSubscription;
 
-  Uint8List? _previousYPlane;
-
-  bool _isInitializing = false;
-  bool _isStreaming = false;
-  bool _isProcessingFrame = false;
   bool _isLoading = false;
-  int _frameCounter = 0;
+  bool _isStreaming = false;
   int _streamFrameCount = 0;
   int _processedFrameCount = 0;
+  int? _sensorMinusElapsedNanos;
   String? _errorText;
   bool _isDisposed = false;
 
   MotionDetectionConfig get config => _config;
-  CameraController? get cameraController => _cameraController;
   MotionFrameStats? get latestStats => _latestStats;
   List<MotionTriggerEvent> get triggerHistory =>
       List.unmodifiable(_triggerHistory);
-
   MotionRunSnapshot get runSnapshot => _runSnapshot;
   LastRunResult? get lastRun => _lastRun;
   bool get isRunActive => _runSnapshot.isActive;
-  String get elapsedDisplay => formatDurationMicros(_runSnapshot.elapsedMicros);
-  List<int> get currentSplitMicros =>
-      List.unmodifiable(_runSnapshot.splitMicros);
+  String get elapsedDisplay => formatDurationNanos(_runSnapshot.elapsedNanos);
+  List<int> get currentSplitElapsedNanos =>
+      List.unmodifiable(_runSnapshot.splitElapsedNanos);
+  int? get sensorMinusElapsedNanos => _sensorMinusElapsedNanos;
 
   String get runStatusLabel {
     if (_runSnapshot.isActive) {
       return 'running';
     }
-    if (_runSnapshot.startedAtMicros != null) {
+    if (_runSnapshot.startedSensorNanos != null) {
       return 'stopped';
     }
     return 'ready';
@@ -77,204 +73,180 @@ class MotionDetectionController extends ChangeNotifier {
     final loadedRun = await _repository.loadLastRun();
     _config = loadedConfig;
     _lastRun = loadedRun;
-    _engine.updateConfig(_config);
     if (!_isDisposed) {
       notifyListeners();
     }
   }
 
   Future<void> initializeCamera() async {
-    if (_cameraController?.value.isInitialized == true || _isInitializing) {
-      return;
-    }
+    _errorText = null;
+    notifyListeners();
+  }
 
-    _isInitializing = true;
+  Future<void> disposeCamera() async {
+    await stopDetection();
+  }
+
+  Future<void> startDetection() async {
     _isLoading = true;
     _errorText = null;
     notifyListeners();
-
     try {
-      final cameras = await availableCameras();
-      if (cameras.isEmpty) {
-        _errorText = 'No camera found on this device.';
-      } else {
-        final selected = cameras.firstWhere(
-          (camera) => camera.lensDirection == CameraLensDirection.back,
-          orElse: () => cameras.first,
-        );
-        final controller = CameraController(
-          selected,
-          ResolutionPreset.medium,
-          enableAudio: false,
-        );
-        await controller.initialize();
-        _cameraController = controller;
-      }
+      await _nativeSensorBridge.startNativeMonitoring(config: _config.toJson());
+      _isStreaming = true;
     } catch (error) {
-      _errorText = 'Camera initialization failed: $error';
+      _isStreaming = false;
+      _errorText = 'Start native monitoring failed: $error';
     } finally {
-      _isInitializing = false;
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  Future<void> disposeCamera() async {
-    await stopDetection();
-    await _cameraController?.dispose();
-    _cameraController = null;
-    notifyListeners();
-  }
-
-  Future<void> startDetection() async {
-    if (_cameraController == null ||
-        _cameraController?.value.isInitialized != true) {
-      await initializeCamera();
-    }
-
-    final controller = _cameraController;
-    if (controller == null || _isStreaming) {
-      return;
-    }
-    if (controller.value.isStreamingImages) {
-      _isStreaming = true;
-      notifyListeners();
-      return;
-    }
-
-    _errorText = null;
-    _latestStats = null;
-    _previousYPlane = null;
-    _frameCounter = 0;
-    _streamFrameCount = 0;
-    _processedFrameCount = 0;
-    _engine.updateConfig(_config);
-
-    try {
-      await controller.startImageStream(_processImage);
-      _isStreaming = controller.value.isStreamingImages;
-    } catch (error) {
-      _isStreaming = false;
-      _errorText = 'Start detection failed: $error';
-    }
-    notifyListeners();
-  }
-
   Future<void> stopDetection() async {
     try {
-      if (_cameraController?.value.isInitialized == true &&
-          _cameraController?.value.isStreamingImages == true) {
-        await _cameraController?.stopImageStream();
-      }
+      await _nativeSensorBridge.stopNativeMonitoring();
     } catch (error) {
-      _errorText = 'Stop detection failed: $error';
+      _errorText = 'Stop native monitoring failed: $error';
     }
-    _isStreaming = _cameraController?.value.isStreamingImages == true;
-    _isProcessingFrame = false;
-    _previousYPlane = null;
-    _frameCounter = 0;
+    _isStreaming = false;
     notifyListeners();
   }
 
   void resetRace() {
-    _engine.resetRace();
     _triggerHistory.clear();
     _runSnapshot = MotionRunSnapshot.ready();
-    _stopRunTicker();
+    unawaited(_nativeSensorBridge.resetNativeRun());
     notifyListeners();
   }
 
   Future<void> updateThreshold(double value) async {
     _config = _config.copyWith(threshold: value.clamp(0.001, 0.08));
-    _engine.updateConfig(_config);
     await _repository.saveMotionConfig(_config);
+    await _pushNativeConfig();
     notifyListeners();
   }
 
   Future<void> updateRoiCenter(double value) async {
     _config = _config.copyWith(roiCenterX: value.clamp(0.20, 0.80));
-    _engine.updateConfig(_config);
     await _repository.saveMotionConfig(_config);
+    await _pushNativeConfig();
     notifyListeners();
   }
 
   Future<void> updateRoiWidth(double value) async {
     _config = _config.copyWith(roiWidth: value.clamp(0.05, 0.40));
-    _engine.updateConfig(_config);
     await _repository.saveMotionConfig(_config);
+    await _pushNativeConfig();
     notifyListeners();
   }
 
   Future<void> updateCooldown(int value) async {
     _config = _config.copyWith(cooldownMs: value.clamp(300, 2000));
-    _engine.updateConfig(_config);
     await _repository.saveMotionConfig(_config);
+    await _pushNativeConfig();
     notifyListeners();
   }
 
-  void _processImage(CameraImage image) {
-    if (_isProcessingFrame) {
+  Future<void> _pushNativeConfig() async {
+    if (!_isStreaming) {
       return;
     }
-    _isProcessingFrame = true;
-    _streamFrameCount += 1;
+    await _nativeSensorBridge.updateNativeConfig(config: _config.toJson());
+  }
 
-    try {
-      _frameCounter += 1;
-      if (_frameCounter % _config.processEveryNFrames != 0) {
+  void _onNativeEvent(Map<String, dynamic> event) {
+    final type = event['type']?.toString();
+    if (type == null) {
+      return;
+    }
+    if (type == 'native_error') {
+      _errorText = event['message']?.toString() ?? 'Native sensor error';
+      notifyListeners();
+      return;
+    }
+    if (type == 'native_state') {
+      _sensorMinusElapsedNanos = _readInt(event['hostSensorMinusElapsedNanos']);
+      notifyListeners();
+      return;
+    }
+    if (type == 'native_frame_stats') {
+      final frameSensorNanos = _readInt(event['frameSensorNanos']);
+      final rawScore = _readDouble(event['rawScore']);
+      final baseline = _readDouble(event['baseline']);
+      final effective = _readDouble(event['effectiveScore']);
+      if (frameSensorNanos == null ||
+          rawScore == null ||
+          baseline == null ||
+          effective == null) {
         return;
       }
-      if (image.planes.isEmpty) {
-        return;
-      }
-
-      final plane = image.planes.first;
-      final currentBytes = plane.bytes;
-      final previousBytes = _previousYPlane;
-
-      _previousYPlane = Uint8List.fromList(currentBytes);
-
-      if (previousBytes == null) {
-        return;
-      }
-
-      final rawScore = _computeNormalizedDelta(
-        current: currentBytes,
-        previous: previousBytes,
-        width: image.width,
-        height: image.height,
-        bytesPerRow: plane.bytesPerRow,
-        roiCenterX: _config.roiCenterX,
-        roiWidth: _config.roiWidth,
-      );
-
-      final timestampMicros = DateTime.now().microsecondsSinceEpoch;
-      final stats = _engine.process(
+      final streamFrameCount = _readInt(event['streamFrameCount']);
+      final processedFrameCount = _readInt(event['processedFrameCount']);
+      _streamFrameCount = streamFrameCount ?? (_streamFrameCount + 1);
+      _processedFrameCount = processedFrameCount ?? (_processedFrameCount + 1);
+      _sensorMinusElapsedNanos =
+          _readInt(event['hostSensorMinusElapsedNanos']) ??
+          _sensorMinusElapsedNanos;
+      _latestStats = MotionFrameStats(
         rawScore: rawScore,
-        timestampMicros: timestampMicros,
+        baseline: baseline,
+        effectiveScore: effective,
+        frameSensorNanos: frameSensorNanos,
       );
-      _processedFrameCount += 1;
-      _latestStats = stats;
-
-      final trigger = stats.triggerEvent;
+      final started = _runSnapshot.startedSensorNanos;
+      if (_runSnapshot.isActive && started != null) {
+        final elapsedNanos = math.max(0, frameSensorNanos - started);
+        if (elapsedNanos != _runSnapshot.elapsedNanos) {
+          _runSnapshot = _runSnapshot.copyWith(elapsedNanos: elapsedNanos);
+        }
+      }
+      notifyListeners();
+      return;
+    }
+    if (type == 'native_trigger') {
+      final trigger = _parseTriggerEvent(event);
       if (trigger != null) {
         ingestTrigger(trigger);
       }
-      notifyListeners();
-    } catch (error) {
-      _errorText = 'Frame processing failed: $error';
-      notifyListeners();
-    } finally {
-      _isProcessingFrame = false;
     }
+  }
+
+  MotionTriggerEvent? _parseTriggerEvent(Map<String, dynamic> event) {
+    final triggerSensorNanos = _readInt(event['triggerSensorNanos']);
+    final score = _readDouble(event['score']);
+    final typeName = event['triggerType']?.toString();
+    final splitIndex = _readInt(event['splitIndex']);
+    if (triggerSensorNanos == null ||
+        score == null ||
+        typeName == null ||
+        splitIndex == null) {
+      return null;
+    }
+    final type = switch (typeName) {
+      'start' => MotionTriggerType.start,
+      'stop' => MotionTriggerType.stop,
+      'split' => MotionTriggerType.split,
+      _ => null,
+    };
+    if (type == null) {
+      return null;
+    }
+    return MotionTriggerEvent(
+      triggerSensorNanos: triggerSensorNanos,
+      score: score,
+      type: type,
+      splitIndex: splitIndex,
+    );
   }
 
   void ingestTrigger(MotionTriggerEvent trigger, {bool forwardToSync = true}) {
     _addTriggerToHistory(trigger);
 
-    if (forwardToSync && _onTrigger != null) {
+    final onTrigger = _onTrigger;
+    if (forwardToSync && onTrigger != null) {
       final snapshotBefore = _runSnapshot;
-      _onTrigger!(trigger);
+      onTrigger(trigger);
       if (!identical(snapshotBefore, _runSnapshot)) {
         return;
       }
@@ -283,29 +255,31 @@ class MotionDetectionController extends ChangeNotifier {
     if (trigger.type == MotionTriggerType.start) {
       _runSnapshot = MotionRunSnapshot(
         isActive: true,
-        startedAtMicros: trigger.triggerMicros,
-        elapsedMicros: 0,
-        splitMicros: const <int>[],
+        startedSensorNanos: trigger.triggerSensorNanos,
+        elapsedNanos: 0,
+        splitElapsedNanos: const <int>[],
       );
-      _startRunTicker();
       unawaited(_persistCurrentRun());
       notifyListeners();
       return;
     }
 
-    if (!_runSnapshot.isActive || _runSnapshot.startedAtMicros == null) {
+    if (!_runSnapshot.isActive || _runSnapshot.startedSensorNanos == null) {
       return;
     }
 
-    final elapsedMicros = math.max(
+    final elapsedNanos = math.max(
       0,
-      trigger.triggerMicros - _runSnapshot.startedAtMicros!,
+      trigger.triggerSensorNanos - _runSnapshot.startedSensorNanos!,
     );
 
     if (trigger.type == MotionTriggerType.split) {
       _runSnapshot = _runSnapshot.copyWith(
-        elapsedMicros: elapsedMicros,
-        splitMicros: <int>[..._runSnapshot.splitMicros, elapsedMicros],
+        elapsedNanos: elapsedNanos,
+        splitElapsedNanos: <int>[
+          ..._runSnapshot.splitElapsedNanos,
+          elapsedNanos,
+        ],
       );
       unawaited(_persistCurrentRun());
       notifyListeners();
@@ -315,13 +289,15 @@ class MotionDetectionController extends ChangeNotifier {
     if (trigger.type == MotionTriggerType.stop) {
       _runSnapshot = _runSnapshot.copyWith(
         isActive: false,
-        elapsedMicros: elapsedMicros,
-        splitMicros: <int>[..._runSnapshot.splitMicros, elapsedMicros],
+        elapsedNanos: elapsedNanos,
+        splitElapsedNanos: <int>[
+          ..._runSnapshot.splitElapsedNanos,
+          elapsedNanos,
+        ],
       );
-      _stopRunTicker();
+      unawaited(_persistCurrentRun());
+      notifyListeners();
     }
-    unawaited(_persistCurrentRun());
-    notifyListeners();
   }
 
   void _addTriggerToHistory(MotionTriggerEvent trigger) {
@@ -331,39 +307,14 @@ class MotionDetectionController extends ChangeNotifier {
     }
   }
 
-  void _startRunTicker() {
-    _runTicker?.cancel();
-    _runTicker = Timer.periodic(const Duration(milliseconds: 50), (_) {
-      final startedAtMicros = _runSnapshot.startedAtMicros;
-      if (!_runSnapshot.isActive || startedAtMicros == null) {
-        return;
-      }
-      final elapsedMicros =
-          DateTime.now().microsecondsSinceEpoch - startedAtMicros;
-      final safeElapsed = math.max(0, elapsedMicros);
-
-      if (safeElapsed == _runSnapshot.elapsedMicros) {
-        return;
-      }
-
-      _runSnapshot = _runSnapshot.copyWith(elapsedMicros: safeElapsed);
-      notifyListeners();
-    });
-  }
-
-  void _stopRunTicker() {
-    _runTicker?.cancel();
-    _runTicker = null;
-  }
-
   Future<void> _persistCurrentRun() async {
-    final startedAtMicros = _runSnapshot.startedAtMicros;
-    if (startedAtMicros == null) {
+    final startedSensorNanos = _runSnapshot.startedSensorNanos;
+    if (startedSensorNanos == null) {
       return;
     }
     final run = LastRunResult(
-      startedAtEpochMs: startedAtMicros ~/ 1000,
-      splitMicros: List<int>.from(_runSnapshot.splitMicros),
+      startedSensorNanos: startedSensorNanos,
+      splitElapsedNanos: List<int>.from(_runSnapshot.splitElapsedNanos),
     );
     _lastRun = run;
     if (!_isDisposed) {
@@ -375,87 +326,27 @@ class MotionDetectionController extends ChangeNotifier {
   @override
   void dispose() {
     _isDisposed = true;
-    _stopRunTicker();
-    _cameraController?.dispose();
+    _nativeEventsSubscription?.cancel();
     super.dispose();
   }
 }
 
-double _computeNormalizedDelta({
-  required Uint8List current,
-  required Uint8List previous,
-  required int width,
-  required int height,
-  required int bytesPerRow,
-  required double roiCenterX,
-  required double roiWidth,
-}) {
-  final verticalCenter = (width * roiCenterX).round();
-  final verticalHalf = (width * roiWidth / 2).round();
-  final verticalStart = (verticalCenter - verticalHalf).clamp(0, width - 1);
-  final verticalEnd = (verticalCenter + verticalHalf).clamp(0, width - 1);
-
-  final horizontalCenter = (height * roiCenterX).round();
-  final horizontalHalf = (height * roiWidth / 2).round();
-  final horizontalStart = (horizontalCenter - horizontalHalf).clamp(
-    0,
-    height - 1,
-  );
-  final horizontalEnd = (horizontalCenter + horizontalHalf).clamp(
-    0,
-    height - 1,
-  );
-
-  final verticalScore = _averageNormalizedAbsDelta(
-    current: current,
-    previous: previous,
-    width: width,
-    height: height,
-    bytesPerRow: bytesPerRow,
-    startPrimary: verticalStart,
-    endPrimary: verticalEnd,
-    primaryIsXAxis: true,
-  );
-
-  final horizontalScore = _averageNormalizedAbsDelta(
-    current: current,
-    previous: previous,
-    width: width,
-    height: height,
-    bytesPerRow: bytesPerRow,
-    startPrimary: horizontalStart,
-    endPrimary: horizontalEnd,
-    primaryIsXAxis: false,
-  );
-
-  return math.max(verticalScore, horizontalScore);
+int? _readInt(dynamic value) {
+  if (value is int) {
+    return value;
+  }
+  if (value is num) {
+    return value.toInt();
+  }
+  return null;
 }
 
-double _averageNormalizedAbsDelta({
-  required Uint8List current,
-  required Uint8List previous,
-  required int width,
-  required int height,
-  required int bytesPerRow,
-  required num startPrimary,
-  required num endPrimary,
-  required bool primaryIsXAxis,
-}) {
-  int sumDiff = 0;
-  int samples = 0;
-  for (int y = 0; y < height; y += 2) {
-    final rowBase = y * bytesPerRow;
-    for (int x = 0; x < width; x += 2) {
-      final primary = primaryIsXAxis ? x : y;
-      if (primary < startPrimary || primary > endPrimary) {
-        continue;
-      }
-      final index = rowBase + x;
-      if (index >= current.length || index >= previous.length) continue;
-      sumDiff += (current[index] - previous[index]).abs();
-      samples += 1;
-    }
+double? _readDouble(dynamic value) {
+  if (value is double) {
+    return value;
   }
-  if (samples == 0) return 0;
-  return (sumDiff / samples) / 255.0;
+  if (value is num) {
+    return value.toDouble();
+  }
+  return null;
 }

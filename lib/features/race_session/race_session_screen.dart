@@ -280,7 +280,7 @@ class RaceSessionScreen extends StatelessWidget {
           Expanded(
             child: MotionDetectionScreen(
               controller: motionController,
-              showPreview: true,
+              showPreview: false,
             ),
           ),
         ],
@@ -336,21 +336,19 @@ class RaceSessionScreen extends StatelessWidget {
                 style: TextStyle(color: Colors.grey),
               )
             else ...[
-              Text(
-                'Started: ${DateTime.fromMillisecondsSinceEpoch(timeline.startedAtEpochMs!).toLocal().toString().split('.').first}',
-              ),
-              if (timeline.splitMicros.isNotEmpty) ...[
+              Text('Started Sensor Nanos: ${timeline.startedSensorNanos}'),
+              if (timeline.splitElapsedNanos.isNotEmpty) ...[
                 const SizedBox(height: 4),
-                ...timeline.splitMicros.asMap().entries.map((entry) {
+                ...timeline.splitElapsedNanos.asMap().entries.map((entry) {
                   return Text(
-                    'Split ${entry.key + 1}: ${formatDurationMicros(entry.value)}',
+                    'Split ${entry.key + 1}: ${formatDurationNanos(entry.value)}',
                   );
                 }),
               ],
               if (timeline.hasStopped) ...[
                 const SizedBox(height: 4),
                 Text(
-                  'Finished: ${formatDurationMicros(timeline.stopElapsedMicros!)}',
+                  'Finished: ${formatDurationNanos(timeline.stopElapsedNanos!)}',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ],

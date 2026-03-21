@@ -11,10 +11,10 @@ void ingestStandalonePulse(
       : MotionTriggerType.start;
   controller.ingestTrigger(
     MotionTriggerEvent(
-      triggerMicros: trigger.triggerMicros,
+      triggerSensorNanos: trigger.triggerSensorNanos,
       score: trigger.score,
       type: type,
-      splitIndex: controller.currentSplitMicros.length + 1,
+      splitIndex: controller.currentSplitElapsedNanos.length + 1,
     ),
     forwardToSync: false,
   );
@@ -25,13 +25,12 @@ void syncMotionControllerFromTimeline(
   SessionRaceTimeline timeline,
 ) {
   controller.resetRace();
-  final startedAtEpochMs = timeline.startedAtEpochMs;
-  if (startedAtEpochMs == null) return;
+  final startedSensorNanos = timeline.startedSensorNanos;
+  if (startedSensorNanos == null) return;
 
-  final startedAtMicros = startedAtEpochMs * 1000;
   controller.ingestTrigger(
     MotionTriggerEvent(
-      triggerMicros: startedAtMicros,
+      triggerSensorNanos: startedSensorNanos,
       score: 0,
       type: MotionTriggerType.start,
       splitIndex: 0,
@@ -39,10 +38,10 @@ void syncMotionControllerFromTimeline(
     forwardToSync: false,
   );
 
-  for (int i = 0; i < timeline.splitMicros.length; i += 1) {
+  for (int i = 0; i < timeline.splitElapsedNanos.length; i += 1) {
     controller.ingestTrigger(
       MotionTriggerEvent(
-        triggerMicros: startedAtMicros + timeline.splitMicros[i],
+        triggerSensorNanos: startedSensorNanos + timeline.splitElapsedNanos[i],
         score: 0,
         type: MotionTriggerType.split,
         splitIndex: i + 1,
@@ -51,11 +50,11 @@ void syncMotionControllerFromTimeline(
     );
   }
 
-  final stopElapsed = timeline.stopElapsedMicros;
+  final stopElapsed = timeline.stopElapsedNanos;
   if (stopElapsed == null) return;
   controller.ingestTrigger(
     MotionTriggerEvent(
-      triggerMicros: startedAtMicros + stopElapsed,
+      triggerSensorNanos: startedSensorNanos + stopElapsed,
       score: 0,
       type: MotionTriggerType.stop,
       splitIndex: 0,
