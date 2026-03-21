@@ -34,3 +34,6 @@ Testing updates:
 Validation status:
 - flutter analyze: clean
 - flutter test --concurrency=1: all tests passed (40 total).
+
+Supersession note:
+- Monitoring internals from this rewrite were later superseded by Android native sensor/nanos timing path; see `implementation/native_sensor_frame_timestamps_nanos_2026_03_20` for current source-of-truth behavior and wire fields.
