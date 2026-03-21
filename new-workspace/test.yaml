@@ -1,0 +1,4 @@
+appId: com.paul.sprintsync
+---
+- launchApp:
+    clearState: true

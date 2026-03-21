@@ -401,6 +401,7 @@ class RaceSessionController extends ChangeNotifier {
       _stage = snapshot.stage;
       _monitoringActive = snapshot.monitoringActive;
       _timeline = snapshot.timeline;
+      final previousHostSensorMinusElapsedNanos = _hostSensorMinusElapsedNanos;
       _hostSensorMinusElapsedNanos =
           snapshot.hostSensorMinusElapsedNanos ?? _hostSensorMinusElapsedNanos;
       _localDeviceId = snapshot.selfDeviceId ?? _localDeviceId;
@@ -434,8 +435,10 @@ class RaceSessionController extends ChangeNotifier {
             previousTimeline.splitElapsedNanos,
             _timeline.splitElapsedNanos,
           );
-      if (timelineChanged) {
-        syncMotionControllerFromTimeline(_motionController, _timeline);
+      final hostOffsetChanged =
+          previousHostSensorMinusElapsedNanos != _hostSensorMinusElapsedNanos;
+      if (timelineChanged || hostOffsetChanged) {
+        _syncMotionControllerFromTimeline();
       }
       notifyListeners();
       return;
@@ -527,6 +530,10 @@ class RaceSessionController extends ChangeNotifier {
     }
     _lastClockSyncElapsedNanos = clientReceiveElapsedNanos;
     _errorText = null;
+    if (isClient && _timeline.hasStarted) {
+      _syncMotionControllerFromTimeline();
+      notifyListeners();
+    }
   }
 
   int? _mapClientSensorToHostSensor(int clientSensorNanos) {
@@ -546,6 +553,47 @@ class RaceSessionController extends ChangeNotifier {
         clientSensorNanos - clientSensorMinusElapsedNanos;
     final hostElapsedNanos = clientElapsedNanos + hostMinusClientElapsedNanos;
     return hostElapsedNanos + hostSensorMinusElapsedNanos;
+  }
+
+  int? _mapHostSensorToLocalSensor(int hostSensorNanos) {
+    final hostSensorMinusElapsedNanos = _hostSensorMinusElapsedNanos;
+    final hostMinusClientElapsedNanos = _hostMinusClientElapsedNanos;
+    final localSensorMinusElapsedNanos =
+        _motionController.sensorMinusElapsedNanos;
+    if (hostSensorMinusElapsedNanos == null ||
+        hostMinusClientElapsedNanos == null ||
+        localSensorMinusElapsedNanos == null) {
+      return null;
+    }
+    final hostElapsedNanos = hostSensorNanos - hostSensorMinusElapsedNanos;
+    final localElapsedNanos = hostElapsedNanos - hostMinusClientElapsedNanos;
+    return localElapsedNanos + localSensorMinusElapsedNanos;
+  }
+
+  void _syncMotionControllerFromTimeline() {
+    if (!_timeline.hasStarted) {
+      syncMotionControllerFromTimeline(_motionController, _timeline);
+      return;
+    }
+    if (!isClient) {
+      syncMotionControllerFromTimeline(_motionController, _timeline);
+      return;
+    }
+    final hostStartSensorNanos = _timeline.startedSensorNanos;
+    if (hostStartSensorNanos == null) {
+      return;
+    }
+    final localStartSensorNanos = _mapHostSensorToLocalSensor(
+      hostStartSensorNanos,
+    );
+    if (localStartSensorNanos == null) {
+      return;
+    }
+    syncMotionControllerFromTimeline(
+      _motionController,
+      _timeline,
+      startedSensorNanosOverride: localStartSensorNanos,
+    );
   }
 
   bool _isClockLockValid() {

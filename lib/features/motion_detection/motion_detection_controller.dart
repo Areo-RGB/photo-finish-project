@@ -241,16 +241,12 @@ class MotionDetectionController extends ChangeNotifier {
   }
 
   void ingestTrigger(MotionTriggerEvent trigger, {bool forwardToSync = true}) {
-    _addTriggerToHistory(trigger);
-
     final onTrigger = _onTrigger;
     if (forwardToSync && onTrigger != null) {
-      final snapshotBefore = _runSnapshot;
       onTrigger(trigger);
-      if (!identical(snapshotBefore, _runSnapshot)) {
-        return;
-      }
+      return;
     }
+    _addTriggerToHistory(trigger);
 
     if (trigger.type == MotionTriggerType.start) {
       _runSnapshot = MotionRunSnapshot(

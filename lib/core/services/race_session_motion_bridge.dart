@@ -22,11 +22,14 @@ void ingestStandalonePulse(
 
 void syncMotionControllerFromTimeline(
   MotionDetectionController controller,
-  SessionRaceTimeline timeline,
-) {
+  SessionRaceTimeline timeline, {
+  int? startedSensorNanosOverride,
+}) {
   controller.resetRace();
-  final startedSensorNanos = timeline.startedSensorNanos;
-  if (startedSensorNanos == null) return;
+  final timelineStartedSensorNanos = timeline.startedSensorNanos;
+  if (timelineStartedSensorNanos == null) return;
+  final startedSensorNanos =
+      startedSensorNanosOverride ?? timelineStartedSensorNanos;
 
   controller.ingestTrigger(
     MotionTriggerEvent(
