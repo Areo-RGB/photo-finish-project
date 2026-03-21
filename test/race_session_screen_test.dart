@@ -72,6 +72,58 @@ void main() {
     fixture.dispose();
   });
 
+  testWidgets('lobby row shows camera toggle next to role control', (
+    tester,
+  ) async {
+    final fixture = _ScreenFixture.create();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RaceSessionScreen(
+          controller: fixture.controller,
+          motionController: fixture.motionController,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 20));
+
+    await tester.tap(find.text('Host'));
+    await tester.pump(const Duration(milliseconds: 20));
+    fixture.bridge.emitEvent(<String, dynamic>{
+      'type': 'connection_result',
+      'endpointId': 'peer-1',
+      'connected': true,
+    });
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.tap(find.text('Next'));
+    await tester.pump(const Duration(milliseconds: 20));
+
+    expect(
+      find.byKey(const ValueKey<String>('camera_facing_toggle_local-device')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('camera_facing_toggle_peer-1')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('camera_facing_front_local-device')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('camera_facing_front_local-device')),
+    );
+    await tester.pump(const Duration(milliseconds: 20));
+
+    final localDevice = fixture.controller.devices.firstWhere(
+      (device) => device.id == 'local-device',
+    );
+    expect(localDevice.cameraFacing, SessionCameraFacing.front);
+
+    fixture.dispose();
+  });
+
   testWidgets('monitoring stage shows preview marker overlay', (tester) async {
     final fixture = _ScreenFixture.create();
 

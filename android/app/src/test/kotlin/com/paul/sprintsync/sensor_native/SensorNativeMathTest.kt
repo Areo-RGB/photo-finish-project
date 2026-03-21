@@ -88,4 +88,53 @@ class SensorNativeMathTest {
         assertTrue(SensorNativeCameraPolicy.shouldLockAeAwb(400))
         assertTrue(SensorNativeCameraPolicy.shouldLockAeAwb(401))
     }
+
+    @Test
+    fun `selectCameraFacing chooses preferred camera when available`() {
+        val rearSelection = SensorNativeCameraPolicy.selectCameraFacing(
+            preferred = NativeCameraFacing.REAR,
+            hasRear = true,
+            hasFront = true,
+        )
+        val frontSelection = SensorNativeCameraPolicy.selectCameraFacing(
+            preferred = NativeCameraFacing.FRONT,
+            hasRear = true,
+            hasFront = true,
+        )
+
+        assertEquals(NativeCameraFacing.REAR, rearSelection?.selected)
+        assertFalse(rearSelection?.fallbackUsed ?: true)
+        assertEquals(NativeCameraFacing.FRONT, frontSelection?.selected)
+        assertFalse(frontSelection?.fallbackUsed ?: true)
+    }
+
+    @Test
+    fun `selectCameraFacing falls back to available camera`() {
+        val fallbackToFront = SensorNativeCameraPolicy.selectCameraFacing(
+            preferred = NativeCameraFacing.REAR,
+            hasRear = false,
+            hasFront = true,
+        )
+        val fallbackToRear = SensorNativeCameraPolicy.selectCameraFacing(
+            preferred = NativeCameraFacing.FRONT,
+            hasRear = true,
+            hasFront = false,
+        )
+
+        assertEquals(NativeCameraFacing.FRONT, fallbackToFront?.selected)
+        assertTrue(fallbackToFront?.fallbackUsed ?: false)
+        assertEquals(NativeCameraFacing.REAR, fallbackToRear?.selected)
+        assertTrue(fallbackToRear?.fallbackUsed ?: false)
+    }
+
+    @Test
+    fun `selectCameraFacing returns null when no camera is available`() {
+        val selection = SensorNativeCameraPolicy.selectCameraFacing(
+            preferred = NativeCameraFacing.REAR,
+            hasRear = false,
+            hasFront = false,
+        )
+
+        assertNull(selection)
+    }
 }

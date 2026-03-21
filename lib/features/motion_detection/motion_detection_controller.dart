@@ -148,6 +148,16 @@ class MotionDetectionController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> updateCameraFacing(MotionCameraFacing facing) async {
+    if (_config.cameraFacing == facing) {
+      return;
+    }
+    _config = _config.copyWith(cameraFacing: facing);
+    await _repository.saveMotionConfig(_config);
+    await _pushNativeConfig();
+    notifyListeners();
+  }
+
   Future<void> _pushNativeConfig() async {
     if (!_isStreaming) {
       return;

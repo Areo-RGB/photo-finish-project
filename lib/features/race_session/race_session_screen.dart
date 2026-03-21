@@ -315,24 +315,59 @@ class RaceSessionScreen extends StatelessWidget {
       if (controller.canShowSplitControls) SessionDeviceRole.split,
       SessionDeviceRole.stop,
     ];
+    final roleControl = canEdit
+        ? PopupMenuButton<SessionDeviceRole>(
+            onSelected: (value) => controller.assignRole(device.id, value),
+            itemBuilder: (context) => allRoles.map((role) {
+              return PopupMenuItem<SessionDeviceRole>(
+                value: role,
+                child: Text(sessionDeviceRoleLabel(role)),
+              );
+            }).toList(),
+            child: Chip(label: Text(sessionDeviceRoleLabel(device.role))),
+          )
+        : Text(sessionDeviceRoleLabel(device.role));
+    final cameraFacingControl = canEdit
+        ? SegmentedButton<SessionCameraFacing>(
+            key: ValueKey<String>('camera_facing_toggle_${device.id}'),
+            showSelectedIcon: false,
+            style: const ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            segments: <ButtonSegment<SessionCameraFacing>>[
+              ButtonSegment<SessionCameraFacing>(
+                value: SessionCameraFacing.rear,
+                label: Text(
+                  'Rear',
+                  key: ValueKey<String>('camera_facing_rear_${device.id}'),
+                ),
+              ),
+              ButtonSegment<SessionCameraFacing>(
+                value: SessionCameraFacing.front,
+                label: Text(
+                  'Front',
+                  key: ValueKey<String>('camera_facing_front_${device.id}'),
+                ),
+              ),
+            ],
+            selected: <SessionCameraFacing>{device.cameraFacing},
+            onSelectionChanged: (selection) {
+              if (selection.isEmpty) return;
+              controller.assignCameraFacing(device.id, selection.first);
+            },
+          )
+        : Text(sessionCameraFacingLabel(device.cameraFacing));
 
     return ListTile(
       dense: true,
       contentPadding: EdgeInsets.zero,
       title: Text(device.isLocal ? '${device.name} (Local)' : device.name),
       subtitle: Text(device.id),
-      trailing: canEdit
-          ? PopupMenuButton<SessionDeviceRole>(
-              onSelected: (value) => controller.assignRole(device.id, value),
-              itemBuilder: (context) => allRoles.map((role) {
-                return PopupMenuItem<SessionDeviceRole>(
-                  value: role,
-                  child: Text(sessionDeviceRoleLabel(role)),
-                );
-              }).toList(),
-              child: Chip(label: Text(sessionDeviceRoleLabel(device.role))),
-            )
-          : Text(sessionDeviceRoleLabel(device.role)),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [cameraFacingControl, const SizedBox(width: 8), roleControl],
+      ),
     );
   }
 

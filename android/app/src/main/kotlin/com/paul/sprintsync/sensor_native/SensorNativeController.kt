@@ -181,6 +181,7 @@ class SensorNativeController(
                         provider = provider,
                         previewView = previewView,
                         includePreview = true,
+                        preferredFacing = config.cameraFacing,
                     )
                     monitoring = true
                     schedulePreviewRebindRetriesIfMonitoring()
@@ -209,8 +210,12 @@ class SensorNativeController(
         emitState("idle")
     }
     private fun updateNativeConfig(call: MethodCall) {
+        val previousFacing = config.cameraFacing
         config = NativeMonitoringConfig.fromMap(call.argument<Any>("config"))
         detectionMath.updateConfig(config)
+        if (monitoring && config.cameraFacing != previousFacing) {
+            rebindCameraUseCasesIfMonitoring()
+        }
         emitState(if (monitoring) "monitoring" else "idle")
     }
     private fun resetNativeRun() {
@@ -236,6 +241,7 @@ class SensorNativeController(
                 provider = provider,
                 previewView = previewView,
                 includePreview = true,
+                preferredFacing = config.cameraFacing,
             )
             true
         } catch (error: Exception) {

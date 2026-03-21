@@ -45,4 +45,32 @@ void main() {
     expect(decoded.hostReceiveElapsedNanos, 20);
     expect(decoded.hostSendElapsedNanos, 21);
   });
+
+  test('session device camera facing serializes and parses', () {
+    const device = SessionDevice(
+      id: 'device-1',
+      name: 'Device 1',
+      role: SessionDeviceRole.start,
+      cameraFacing: SessionCameraFacing.front,
+      isLocal: false,
+    );
+
+    final encoded = device.toJson();
+    final decoded = SessionDevice.fromJson(encoded);
+
+    expect(decoded, isNotNull);
+    expect(decoded!.cameraFacing, SessionCameraFacing.front);
+  });
+
+  test('session device camera facing defaults to rear when missing', () {
+    final decoded = SessionDevice.fromJson(<String, dynamic>{
+      'id': 'device-1',
+      'name': 'Device 1',
+      'role': SessionDeviceRole.stop.name,
+      'isLocal': true,
+    });
+
+    expect(decoded, isNotNull);
+    expect(decoded!.cameraFacing, SessionCameraFacing.rear);
+  });
 }

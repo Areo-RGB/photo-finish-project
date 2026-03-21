@@ -39,8 +39,14 @@ internal class SensorNativeCameraSession(
         provider: ProcessCameraProvider,
         previewView: PreviewView?,
         includePreview: Boolean,
+        preferredFacing: NativeCameraFacing,
     ) {
-        val binding = bindCameraUseCases(provider, previewView, includePreview)
+        val binding = bindCameraUseCases(
+            provider = provider,
+            previewView = previewView,
+            includePreview = includePreview,
+            preferredFacing = preferredFacing,
+        )
         applyUnlockedPolicy(binding)
     }
 
@@ -48,6 +54,7 @@ internal class SensorNativeCameraSession(
         provider: ProcessCameraProvider,
         previewView: PreviewView?,
         includePreview: Boolean,
+        preferredFacing: NativeCameraFacing,
     ): CameraBinding {
         cancelPendingAeAwbLock()
         provider.unbindAll()
@@ -58,16 +65,19 @@ internal class SensorNativeCameraSession(
             .build()
         imageAnalysis.setAnalyzer(analyzerExecutor, analyzer)
 
-        val selector = when {
-            provider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA) -> {
-                CameraSelector.DEFAULT_BACK_CAMERA
-            }
-
-            provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA) -> {
-                CameraSelector.DEFAULT_FRONT_CAMERA
-            }
-
-            else -> throw IllegalStateException("No camera available for native monitoring.")
+        val facingSelection = SensorNativeCameraPolicy.selectCameraFacing(
+            preferred = preferredFacing,
+            hasRear = provider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA),
+            hasFront = provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA),
+        ) ?: throw IllegalStateException("No camera available for native monitoring.")
+        if (facingSelection.fallbackUsed) {
+            emitError(
+                "Requested ${preferredFacing.wireName} camera unavailable; using ${facingSelection.selected.wireName}.",
+            )
+        }
+        val selector = when (facingSelection.selected) {
+            NativeCameraFacing.REAR -> CameraSelector.DEFAULT_BACK_CAMERA
+            NativeCameraFacing.FRONT -> CameraSelector.DEFAULT_FRONT_CAMERA
         }
 
         val localPreviewView = if (includePreview) previewView else null
@@ -197,6 +207,11 @@ internal class SensorNativeCameraSession(
 internal object SensorNativeCameraPolicy {
     const val AE_AWB_WARMUP_MS = 400L
 
+    data class CameraFacingSelection(
+        val selected: NativeCameraFacing,
+        val fallbackUsed: Boolean,
+    )
+
     fun shouldLockAeAwb(elapsedMs: Long): Boolean {
         return elapsedMs >= AE_AWB_WARMUP_MS
     }
@@ -216,5 +231,32 @@ internal object SensorNativeCameraPolicy {
             return null
         }
         return bounds.maxWithOrNull(compareBy<Pair<Int, Int>>({ it.second }, { it.first }))
+    }
+
+    fun selectCameraFacing(
+        preferred: NativeCameraFacing,
+        hasRear: Boolean,
+        hasFront: Boolean,
+    ): CameraFacingSelection? {
+        if (!hasRear && !hasFront) {
+            return null
+        }
+        return when (preferred) {
+            NativeCameraFacing.REAR -> {
+                if (hasRear) {
+                    CameraFacingSelection(selected = NativeCameraFacing.REAR, fallbackUsed = false)
+                } else {
+                    CameraFacingSelection(selected = NativeCameraFacing.FRONT, fallbackUsed = true)
+                }
+            }
+
+            NativeCameraFacing.FRONT -> {
+                if (hasFront) {
+                    CameraFacingSelection(selected = NativeCameraFacing.FRONT, fallbackUsed = false)
+                } else {
+                    CameraFacingSelection(selected = NativeCameraFacing.REAR, fallbackUsed = true)
+                }
+            }
+        }
     }
 }

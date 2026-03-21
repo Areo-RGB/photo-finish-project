@@ -186,8 +186,21 @@ class RaceSessionController extends ChangeNotifier {
     unawaited(_broadcastSnapshot());
   }
 
+  void assignCameraFacing(String deviceId, SessionCameraFacing cameraFacing) {
+    if (!isHost || _monitoringActive) return;
+    final device = _devices[deviceId];
+    if (device == null || device.cameraFacing == cameraFacing) return;
+    _devices[deviceId] = device.copyWith(cameraFacing: cameraFacing);
+    notifyListeners();
+    if (deviceId == _localDeviceId) {
+      unawaited(_syncLocalCameraFacingFromDevices());
+    }
+    unawaited(_broadcastSnapshot());
+  }
+
   Future<void> startMonitoring() async {
     if (!canStartMonitoring) return;
+    await _syncLocalCameraFacingFromDevices();
     _monitoringActive = true;
     _stage = SessionStage.monitoring;
     _timeline = SessionRaceTimeline.idle();
@@ -433,6 +446,7 @@ class RaceSessionController extends ChangeNotifier {
             return MapEntry(device.id, device.copyWith(isLocal: isLocal));
           }),
         );
+      await _syncLocalCameraFacingFromDevices();
       if (!wasMonitoring && _monitoringActive) {
         _clearClockSyncLock();
         if (_startMonitoringAction != null) {
@@ -770,6 +784,27 @@ class RaceSessionController extends ChangeNotifier {
           selfDeviceId: endpointId,
         ).toJsonString(),
       );
+    }
+  }
+
+  Future<void> _syncLocalCameraFacingFromDevices() async {
+    final localDevice = _devices[_localDeviceId];
+    if (localDevice == null) {
+      return;
+    }
+    final localFacing = _toMotionCameraFacing(localDevice.cameraFacing);
+    if (_motionController.config.cameraFacing == localFacing) {
+      return;
+    }
+    await _motionController.updateCameraFacing(localFacing);
+  }
+
+  MotionCameraFacing _toMotionCameraFacing(SessionCameraFacing cameraFacing) {
+    switch (cameraFacing) {
+      case SessionCameraFacing.rear:
+        return MotionCameraFacing.rear;
+      case SessionCameraFacing.front:
+        return MotionCameraFacing.front;
     }
   }
 

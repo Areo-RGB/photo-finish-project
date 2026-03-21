@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 enum MotionTriggerType { start, stop, split }
 
+enum MotionCameraFacing { rear, front }
+
 class MotionRunSnapshot {
   const MotionRunSnapshot({
     required this.isActive,
@@ -49,6 +51,7 @@ class MotionDetectionConfig {
     required this.roiWidth,
     required this.cooldownMs,
     required this.processEveryNFrames,
+    this.cameraFacing = MotionCameraFacing.rear,
   });
 
   final double threshold;
@@ -56,6 +59,7 @@ class MotionDetectionConfig {
   final double roiWidth;
   final int cooldownMs;
   final int processEveryNFrames;
+  final MotionCameraFacing cameraFacing;
 
   factory MotionDetectionConfig.defaults() {
     return const MotionDetectionConfig(
@@ -64,6 +68,7 @@ class MotionDetectionConfig {
       roiWidth: 0.12,
       cooldownMs: 900,
       processEveryNFrames: 1,
+      cameraFacing: MotionCameraFacing.rear,
     );
   }
 
@@ -73,6 +78,7 @@ class MotionDetectionConfig {
     double? roiWidth,
     int? cooldownMs,
     int? processEveryNFrames,
+    MotionCameraFacing? cameraFacing,
   }) {
     return MotionDetectionConfig(
       threshold: threshold ?? this.threshold,
@@ -80,6 +86,7 @@ class MotionDetectionConfig {
       roiWidth: roiWidth ?? this.roiWidth,
       cooldownMs: cooldownMs ?? this.cooldownMs,
       processEveryNFrames: processEveryNFrames ?? this.processEveryNFrames,
+      cameraFacing: cameraFacing ?? this.cameraFacing,
     );
   }
 
@@ -90,6 +97,7 @@ class MotionDetectionConfig {
       'roiWidth': roiWidth,
       'cooldownMs': cooldownMs,
       'processEveryNFrames': processEveryNFrames,
+      'cameraFacing': cameraFacing.name,
     };
   }
 
@@ -106,6 +114,9 @@ class MotionDetectionConfig {
     final parsedFrameSkip =
         (json['processEveryNFrames'] as num?)?.toInt() ??
         defaults.processEveryNFrames;
+    final parsedCameraFacing =
+        motionCameraFacingFromName(json['cameraFacing']?.toString()) ??
+        defaults.cameraFacing;
 
     return MotionDetectionConfig(
       threshold: _clampDouble(parsedThreshold, 0.001, 0.08),
@@ -113,8 +124,21 @@ class MotionDetectionConfig {
       roiWidth: _clampDouble(parsedRoiWidth, 0.05, 0.40),
       cooldownMs: parsedCooldown.clamp(300, 2000),
       processEveryNFrames: parsedFrameSkip.clamp(1, 5),
+      cameraFacing: parsedCameraFacing,
     );
   }
+}
+
+MotionCameraFacing? motionCameraFacingFromName(String? name) {
+  if (name == null) {
+    return null;
+  }
+  for (final value in MotionCameraFacing.values) {
+    if (value.name == name) {
+      return value;
+    }
+  }
+  return null;
 }
 
 class MotionTriggerEvent {

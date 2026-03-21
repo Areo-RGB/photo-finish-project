@@ -226,11 +226,39 @@ void main() {
       controller.dispose();
     },
   );
+
+  test(
+    'updateCameraFacing persists and pushes native config while streaming',
+    () async {
+      final bridge = _FakeNativeSensorBridge();
+      final controller = MotionDetectionController(
+        repository: LocalRepository(),
+        nativeSensorBridge: bridge,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+
+      await controller.startDetection();
+      expect(bridge.startConfigs, isNotEmpty);
+      expect(bridge.startConfigs.last['cameraFacing'], 'rear');
+
+      await controller.updateCameraFacing(MotionCameraFacing.front);
+
+      expect(controller.config.cameraFacing, MotionCameraFacing.front);
+      expect(bridge.updateConfigs, isNotEmpty);
+      expect(bridge.updateConfigs.last['cameraFacing'], 'front');
+      final savedConfig = await LocalRepository().loadMotionConfig();
+      expect(savedConfig.cameraFacing, MotionCameraFacing.front);
+
+      controller.dispose();
+    },
+  );
 }
 
 class _FakeNativeSensorBridge extends NativeSensorBridge {
   final StreamController<Map<String, dynamic>> _eventsController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final List<Map<String, dynamic>> startConfigs = <Map<String, dynamic>>[];
+  final List<Map<String, dynamic>> updateConfigs = <Map<String, dynamic>>[];
   int resetCalls = 0;
 
   @override
@@ -239,7 +267,9 @@ class _FakeNativeSensorBridge extends NativeSensorBridge {
   @override
   Future<void> startNativeMonitoring({
     required Map<String, dynamic> config,
-  }) async {}
+  }) async {
+    startConfigs.add(Map<String, dynamic>.from(config));
+  }
 
   @override
   Future<void> stopNativeMonitoring() async {}
@@ -247,7 +277,9 @@ class _FakeNativeSensorBridge extends NativeSensorBridge {
   @override
   Future<void> updateNativeConfig({
     required Map<String, dynamic> config,
-  }) async {}
+  }) async {
+    updateConfigs.add(Map<String, dynamic>.from(config));
+  }
 
   @override
   Future<void> resetNativeRun() async {

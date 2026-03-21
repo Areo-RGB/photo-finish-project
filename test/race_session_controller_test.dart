@@ -767,6 +767,101 @@ void main() {
     expect(fixture.controller.errorText, contains('no valid clock lock'));
     fixture.dispose();
   });
+
+  test(
+    'host camera-facing assignment updates device and snapshot payload',
+    () async {
+      final fixture = _ControllerFixture.create();
+      await fixture.controller.createLobby();
+      fixture.bridge.emitEvent(<String, dynamic>{
+        'type': 'connection_result',
+        'endpointId': 'peer-1',
+        'connected': true,
+      });
+      await _flushEvents();
+      fixture.bridge.sentPayloads.clear();
+
+      fixture.controller.assignCameraFacing(
+        'local-device',
+        SessionCameraFacing.front,
+      );
+      await _flushEvents();
+
+      final localDevice = fixture.controller.devices.firstWhere(
+        (device) => device.id == 'local-device',
+      );
+      expect(localDevice.cameraFacing, SessionCameraFacing.front);
+      final snapshots = fixture.bridge.sentPayloads
+          .map(
+            (payload) => SessionSnapshotMessage.tryParse(payload.messageJson),
+          )
+          .whereType<SessionSnapshotMessage>()
+          .toList();
+      expect(snapshots, isNotEmpty);
+      final localDeviceInSnapshot = snapshots.last.devices.firstWhere(
+        (device) => device.id == 'local-device',
+      );
+      expect(localDeviceInSnapshot.cameraFacing, SessionCameraFacing.front);
+      fixture.dispose();
+    },
+  );
+
+  test(
+    'client applies snapshot camera-facing before monitoring starts',
+    () async {
+      MotionCameraFacing? facingAtStart;
+      late _ControllerFixture fixture;
+      fixture = _ControllerFixture.create(
+        startMonitoringAction: () async {
+          facingAtStart = fixture.motionController.config.cameraFacing;
+        },
+      );
+
+      await fixture.controller.joinLobby();
+      fixture.bridge.emitEvent(<String, dynamic>{
+        'type': 'connection_result',
+        'endpointId': 'host-1',
+        'connected': true,
+      });
+      await _flushEvents();
+
+      fixture.bridge.emitEvent(<String, dynamic>{
+        'type': 'payload_received',
+        'endpointId': 'host-1',
+        'message': SessionSnapshotMessage(
+          stage: SessionStage.monitoring,
+          monitoringActive: true,
+          devices: const <SessionDevice>[
+            SessionDevice(
+              id: 'local-device',
+              name: 'Client',
+              role: SessionDeviceRole.start,
+              cameraFacing: SessionCameraFacing.front,
+              isLocal: false,
+            ),
+            SessionDevice(
+              id: 'host-1',
+              name: 'Host',
+              role: SessionDeviceRole.stop,
+              cameraFacing: SessionCameraFacing.rear,
+              isLocal: false,
+            ),
+          ],
+          timeline: SessionRaceTimeline.idle(),
+          hostSensorMinusElapsedNanos: 120000000,
+          selfDeviceId: 'local-device',
+        ).toJsonString(),
+      });
+      await _flushEvents();
+
+      expect(facingAtStart, MotionCameraFacing.front);
+      expect(
+        fixture.motionController.config.cameraFacing,
+        MotionCameraFacing.front,
+      );
+      fixture.dispose();
+    },
+  );
 }
 
 Future<void> _flushEvents() async {
@@ -786,7 +881,11 @@ class _ControllerFixture {
   final MotionDetectionController motionController;
   final RaceSessionController controller;
 
-  factory _ControllerFixture.create({int Function()? nowElapsedNanos}) {
+  factory _ControllerFixture.create({
+    int Function()? nowElapsedNanos,
+    Future<void> Function()? startMonitoringAction,
+    Future<void> Function()? stopMonitoringAction,
+  }) {
     final bridge = _FakeNearbyBridge();
     final nativeBridge = _FakeNativeSensorBridge();
     final motionController = MotionDetectionController(
@@ -796,8 +895,8 @@ class _ControllerFixture {
     final controller = RaceSessionController(
       nearbyBridge: bridge,
       motionController: motionController,
-      startMonitoringAction: () async {},
-      stopMonitoringAction: () async {},
+      startMonitoringAction: startMonitoringAction ?? () async {},
+      stopMonitoringAction: stopMonitoringAction ?? () async {},
       nowElapsedNanos: nowElapsedNanos,
     );
     return _ControllerFixture(

@@ -3,12 +3,18 @@ package com.paul.sprintsync.sensor_native
 import kotlin.math.max
 import kotlin.math.min
 
+enum class NativeCameraFacing(val wireName: String) {
+    REAR("rear"),
+    FRONT("front"),
+}
+
 data class NativeMonitoringConfig(
     val threshold: Double,
     val roiCenterX: Double,
     val roiWidth: Double,
     val cooldownMs: Int,
     val processEveryNFrames: Int,
+    val cameraFacing: NativeCameraFacing,
 ) {
     companion object {
         fun defaults(): NativeMonitoringConfig {
@@ -18,6 +24,7 @@ data class NativeMonitoringConfig(
                 roiWidth = 0.12,
                 cooldownMs = 900,
                 processEveryNFrames = 1,
+                cameraFacing = NativeCameraFacing.REAR,
             )
         }
 
@@ -53,6 +60,9 @@ data class NativeMonitoringConfig(
                     1,
                     5,
                 ),
+                cameraFacing = nativeCameraFacingFromWire(
+                    raw["cameraFacing"]?.toString(),
+                ) ?: defaults.cameraFacing,
             )
         }
     }
@@ -79,4 +89,8 @@ private fun clampDouble(value: Double, minValue: Double, maxValue: Double): Doub
 
 private fun clampInt(value: Int, minValue: Int, maxValue: Int): Int {
     return min(max(value, minValue), maxValue)
+}
+
+private fun nativeCameraFacingFromWire(value: String?): NativeCameraFacing? {
+    return NativeCameraFacing.values().firstOrNull { it.wireName == value }
 }

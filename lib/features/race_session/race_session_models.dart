@@ -6,29 +6,35 @@ enum SessionNetworkRole { none, host, client }
 
 enum SessionDeviceRole { unassigned, start, split, stop }
 
+enum SessionCameraFacing { rear, front }
+
 class SessionDevice {
   const SessionDevice({
     required this.id,
     required this.name,
     required this.role,
+    this.cameraFacing = SessionCameraFacing.rear,
     required this.isLocal,
   });
 
   final String id;
   final String name;
   final SessionDeviceRole role;
+  final SessionCameraFacing cameraFacing;
   final bool isLocal;
 
   SessionDevice copyWith({
     String? id,
     String? name,
     SessionDeviceRole? role,
+    SessionCameraFacing? cameraFacing,
     bool? isLocal,
   }) {
     return SessionDevice(
       id: id ?? this.id,
       name: name ?? this.name,
       role: role ?? this.role,
+      cameraFacing: cameraFacing ?? this.cameraFacing,
       isLocal: isLocal ?? this.isLocal,
     );
   }
@@ -38,6 +44,7 @@ class SessionDevice {
       'id': id,
       'name': name,
       'role': role.name,
+      'cameraFacing': cameraFacing.name,
       'isLocal': isLocal,
     };
   }
@@ -49,6 +56,9 @@ class SessionDevice {
     final id = source['id']?.toString();
     final name = source['name']?.toString();
     final role = sessionDeviceRoleFromName(source['role']?.toString());
+    final cameraFacing =
+        sessionCameraFacingFromName(source['cameraFacing']?.toString()) ??
+        SessionCameraFacing.rear;
     if (id == null || id.isEmpty || name == null || role == null) {
       return null;
     }
@@ -56,6 +66,7 @@ class SessionDevice {
       id: id,
       name: name,
       role: role,
+      cameraFacing: cameraFacing,
       isLocal: source['isLocal'] == true,
     );
   }
@@ -360,6 +371,18 @@ SessionDeviceRole? sessionDeviceRoleFromName(String? name) {
   return null;
 }
 
+SessionCameraFacing? sessionCameraFacingFromName(String? name) {
+  if (name == null) {
+    return null;
+  }
+  for (final value in SessionCameraFacing.values) {
+    if (value.name == name) {
+      return value;
+    }
+  }
+  return null;
+}
+
 String sessionDeviceRoleLabel(SessionDeviceRole role) {
   switch (role) {
     case SessionDeviceRole.unassigned:
@@ -370,5 +393,14 @@ String sessionDeviceRoleLabel(SessionDeviceRole role) {
       return 'Split';
     case SessionDeviceRole.stop:
       return 'Stop';
+  }
+}
+
+String sessionCameraFacingLabel(SessionCameraFacing facing) {
+  switch (facing) {
+    case SessionCameraFacing.rear:
+      return 'Rear';
+    case SessionCameraFacing.front:
+      return 'Front';
   }
 }
