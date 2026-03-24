@@ -22,17 +22,26 @@ internal class SensorNativeCameraSession(
     private val analyzerExecutor: ExecutorService,
     private val analyzer: ImageAnalysis.Analyzer,
     private val emitError: (String) -> Unit,
+    private val emitDiagnostic: (String) -> Unit,
 ) {
     private var camera: Camera? = null
     private var bindGeneration = 0L
     private var pendingAeAwbLockRunnable: Runnable? = null
     private var previewUseCase: Preview? = null
+    private var hsFallbackDiagnosticEmitted = false
+    @Volatile
+    private var activeFpsMode: NativeCameraFpsMode = NativeCameraFpsMode.NORMAL
+    @Volatile
+    private var activeTargetFpsUpper = 0
 
     fun stop(provider: ProcessCameraProvider?) {
         cancelPendingAeAwbLock()
         provider?.unbindAll()
         camera = null
         previewUseCase = null
+        hsFallbackDiagnosticEmitted = false
+        activeFpsMode = NativeCameraFpsMode.NORMAL
+        activeTargetFpsUpper = 0
     }
 
     fun bindAndConfigure(
@@ -40,6 +49,7 @@ internal class SensorNativeCameraSession(
         previewView: PreviewView?,
         includePreview: Boolean,
         preferredFacing: NativeCameraFacing,
+        preferredFpsMode: NativeCameraFpsMode,
     ) {
         val binding = bindCameraUseCases(
             provider = provider,
@@ -47,8 +57,12 @@ internal class SensorNativeCameraSession(
             includePreview = includePreview,
             preferredFacing = preferredFacing,
         )
-        applyUnlockedPolicy(binding)
+        applyUnlockedPolicy(binding, preferredFpsMode)
     }
+
+    fun currentCameraFpsMode(): NativeCameraFpsMode = activeFpsMode
+
+    fun currentTargetFpsUpper(): Int = activeTargetFpsUpper
 
     private fun bindCameraUseCases(
         provider: ProcessCameraProvider,
@@ -102,26 +116,79 @@ internal class SensorNativeCameraSession(
         )
     }
 
-    private fun applyUnlockedPolicy(binding: CameraBinding) {
-        val fpsRange = SensorNativeCameraPolicy.selectHighestFrameRateRange(
+    private fun applyUnlockedPolicy(
+        binding: CameraBinding,
+        preferredFpsMode: NativeCameraFpsMode,
+    ) {
+        val fpsSelection = SensorNativeCameraPolicy.selectFrameRateSelection(
             binding.camera.cameraInfo.supportedFrameRateRanges,
+            preferredFpsMode,
         )
-        if (fpsRange == null) {
+        if (fpsSelection == null) {
             emitError("No supported FPS range reported; continuing with camera defaults.")
             return
+        }
+        if (fpsSelection.fallbackActivated) {
+            emitHsFallbackDiagnosticOnce(
+                "HS120 unavailable; using normal ${fpsSelection.primaryRange.lower}-${fpsSelection.primaryRange.upper} fps.",
+            )
         }
 
         applyCamera2Options(
             binding = binding,
-            fpsRange = fpsRange,
+            fpsRange = fpsSelection.primaryRange,
             lockAeAwb = false,
         ) { success, error ->
             if (!success) {
-                handleUnlockedPolicyFailure(error ?: "unknown")
+                val fallbackRange = fpsSelection.fallbackRange
+                if (fallbackRange == null) {
+                    handleUnlockedPolicyFailure(error ?: "unknown")
+                    return@applyCamera2Options
+                }
+                emitHsFallbackDiagnosticOnce(
+                    "HS120 apply failed; falling back to normal ${fallbackRange.lower}-${fallbackRange.upper} fps.",
+                )
+                applyCamera2Options(
+                    binding = binding,
+                    fpsRange = fallbackRange,
+                    lockAeAwb = false,
+                ) { fallbackSuccess, fallbackError ->
+                    if (!fallbackSuccess) {
+                        handleUnlockedPolicyFailure(
+                            "primary=${error ?: "unknown"}, fallback=${fallbackError ?: "unknown"}",
+                        )
+                        return@applyCamera2Options
+                    }
+                    updateActiveFps(
+                        mode = NativeCameraFpsMode.NORMAL,
+                        range = fallbackRange,
+                    )
+                    scheduleAeAwbLock(binding, fallbackRange)
+                }
                 return@applyCamera2Options
             }
-            scheduleAeAwbLock(binding, fpsRange)
+            updateActiveFps(
+                mode = fpsSelection.primaryMode,
+                range = fpsSelection.primaryRange,
+            )
+            scheduleAeAwbLock(binding, fpsSelection.primaryRange)
         }
+    }
+
+    private fun updateActiveFps(
+        mode: NativeCameraFpsMode,
+        range: Range<Int>,
+    ) {
+        activeFpsMode = mode
+        activeTargetFpsUpper = range.upper
+    }
+
+    private fun emitHsFallbackDiagnosticOnce(message: String) {
+        if (hsFallbackDiagnosticEmitted) {
+            return
+        }
+        hsFallbackDiagnosticEmitted = true
+        emitDiagnostic(message)
     }
 
     private fun handleUnlockedPolicyFailure(reason: String) {
@@ -206,6 +273,21 @@ internal class SensorNativeCameraSession(
 
 internal object SensorNativeCameraPolicy {
     const val AE_AWB_WARMUP_MS = 400L
+    private const val NORMAL_MODE_MAX_UPPER_FPS = 60
+
+    data class FrameRateSelection(
+        val primaryRange: Range<Int>,
+        val primaryMode: NativeCameraFpsMode,
+        val fallbackRange: Range<Int>?,
+        val fallbackActivated: Boolean,
+    )
+
+    data class FrameRateSelectionBounds(
+        val primaryBounds: Pair<Int, Int>,
+        val primaryMode: NativeCameraFpsMode,
+        val fallbackBounds: Pair<Int, Int>?,
+        val fallbackActivated: Boolean,
+    )
 
     data class CameraFacingSelection(
         val selected: NativeCameraFacing,
@@ -214,6 +296,70 @@ internal object SensorNativeCameraPolicy {
 
     fun shouldLockAeAwb(elapsedMs: Long): Boolean {
         return elapsedMs >= AE_AWB_WARMUP_MS
+    }
+
+    fun selectFrameRateSelection(
+        ranges: Set<Range<Int>>?,
+        preferredMode: NativeCameraFpsMode,
+    ): FrameRateSelection? {
+        val bounds = ranges?.map { it.lower to it.upper }
+        val selected = selectFrameRateSelectionBounds(bounds, preferredMode) ?: return null
+        return FrameRateSelection(
+            primaryRange = Range(selected.primaryBounds.first, selected.primaryBounds.second),
+            primaryMode = selected.primaryMode,
+            fallbackRange = selected.fallbackBounds?.let { Range(it.first, it.second) },
+            fallbackActivated = selected.fallbackActivated,
+        )
+    }
+
+    fun selectFrameRateSelectionBounds(
+        bounds: Iterable<Pair<Int, Int>>?,
+        preferredMode: NativeCameraFpsMode,
+    ): FrameRateSelectionBounds? {
+        if (bounds == null) {
+            return null
+        }
+        val boundsList = bounds.toList()
+        if (boundsList.isEmpty()) {
+            return null
+        }
+        val normalBounds = selectHighestNormalFrameRateBounds(boundsList)
+        val fixed120Bounds = boundsList.firstOrNull { it.first == 120 && it.second == 120 }
+        return when (preferredMode) {
+            NativeCameraFpsMode.HS120 -> {
+                if (fixed120Bounds != null) {
+                    val fallback = normalBounds?.takeIf { it != fixed120Bounds }
+                    FrameRateSelectionBounds(
+                        primaryBounds = fixed120Bounds,
+                        primaryMode = NativeCameraFpsMode.HS120,
+                        fallbackBounds = fallback,
+                        fallbackActivated = false,
+                    )
+                } else {
+                    val fallback = normalBounds ?: selectHighestFrameRateBounds(boundsList)
+                    if (fallback == null) {
+                        null
+                    } else {
+                        FrameRateSelectionBounds(
+                            primaryBounds = fallback,
+                            primaryMode = NativeCameraFpsMode.NORMAL,
+                            fallbackBounds = null,
+                            fallbackActivated = true,
+                        )
+                    }
+                }
+            }
+
+            NativeCameraFpsMode.NORMAL -> {
+                val selected = normalBounds ?: selectHighestFrameRateBounds(boundsList) ?: return null
+                FrameRateSelectionBounds(
+                    primaryBounds = selected,
+                    primaryMode = NativeCameraFpsMode.NORMAL,
+                    fallbackBounds = null,
+                    fallbackActivated = false,
+                )
+            }
+        }
     }
 
     fun selectHighestFrameRateRange(ranges: Set<Range<Int>>?): Range<Int>? {
@@ -231,6 +377,19 @@ internal object SensorNativeCameraPolicy {
             return null
         }
         return bounds.maxWithOrNull(compareBy<Pair<Int, Int>>({ it.second }, { it.first }))
+    }
+
+    fun selectHighestNormalFrameRateBounds(
+        bounds: Iterable<Pair<Int, Int>>?,
+    ): Pair<Int, Int>? {
+        if (bounds == null) {
+            return null
+        }
+        val normalBounds = bounds.filter { it.second <= NORMAL_MODE_MAX_UPPER_FPS }
+        if (normalBounds.isEmpty()) {
+            return null
+        }
+        return normalBounds.maxWithOrNull(compareBy<Pair<Int, Int>>({ it.second }, { it.first }))
     }
 
     fun selectCameraFacing(

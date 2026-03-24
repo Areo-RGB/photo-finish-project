@@ -140,9 +140,10 @@ void main() {
     tester,
   ) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
+    final bridge = _FakeNativeSensorBridge();
     final controller = MotionDetectionController(
       repository: LocalRepository(),
-      nativeSensorBridge: _FakeNativeSensorBridge(),
+      nativeSensorBridge: bridge,
     );
 
     await tester.pumpWidget(
@@ -168,6 +169,15 @@ void main() {
       find.byType(FractionallySizedBox),
     );
     expect(compactPreviewContainer.widthFactor, closeTo(0.34, 0.001));
+    expect(
+      find.byKey(const ValueKey<String>('preview_fps_overlay')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('preview_fps_overlay_text')),
+      findsOneWidget,
+    );
+    expect(find.text('--.- fps · INIT'), findsOneWidget);
 
     final alignFinder = find.byKey(
       const ValueKey<String>('preview_tripwire_alignment'),
@@ -183,6 +193,21 @@ void main() {
     final updatedAlignment =
         tester.widget<Align>(alignFinder).alignment as Alignment;
     expect(updatedAlignment.x, closeTo(0.60, 0.001));
+
+    bridge.emitEvent({
+      'type': 'native_frame_stats',
+      'rawScore': 0.01,
+      'baseline': 0.005,
+      'effectiveScore': 0.005,
+      'frameSensorNanos': 2000000000,
+      'streamFrameCount': 10,
+      'processedFrameCount': 10,
+      'observedFps': 118.7,
+      'cameraFpsMode': 'hs120',
+      'targetFpsUpper': 120,
+    });
+    await tester.pump(const Duration(milliseconds: 10));
+    expect(find.text('118.7 fps · HS'), findsOneWidget);
 
     controller.dispose();
   });
@@ -243,6 +268,10 @@ class _FakeNativeSensorBridge extends NativeSensorBridge {
 
   @override
   Future<void> resetNativeRun() async {}
+
+  void emitEvent(Map<String, dynamic> event) {
+    _eventsController.add(Map<String, dynamic>.from(event));
+  }
 }
 
 Future<void> _setUpPlatformViewsMock() async {

@@ -40,6 +40,9 @@ class MotionDetectionController extends ChangeNotifier {
   int? _sensorMinusElapsedNanos;
   int? _gpsUtcOffsetNanos;
   int? _gpsFixElapsedRealtimeNanos;
+  double? _observedFps;
+  String? _cameraFpsMode;
+  int? _targetFpsUpper;
   String? _errorText;
   bool _isDisposed = false;
 
@@ -56,6 +59,9 @@ class MotionDetectionController extends ChangeNotifier {
   int? get sensorMinusElapsedNanos => _sensorMinusElapsedNanos;
   int? get gpsUtcOffsetNanos => _gpsUtcOffsetNanos;
   int? get gpsFixElapsedRealtimeNanos => _gpsFixElapsedRealtimeNanos;
+  double? get observedFps => _observedFps;
+  String? get cameraFpsMode => _cameraFpsMode;
+  int? get targetFpsUpper => _targetFpsUpper;
 
   String get runStatusLabel {
     if (_runSnapshot.isActive) {
@@ -103,6 +109,9 @@ class MotionDetectionController extends ChangeNotifier {
   Future<void> startDetection() async {
     _isLoading = true;
     _errorText = null;
+    _observedFps = null;
+    _cameraFpsMode = null;
+    _targetFpsUpper = null;
     notifyListeners();
     try {
       await _nativeSensorBridge.startNativeMonitoring(config: _config.toJson());
@@ -123,6 +132,9 @@ class MotionDetectionController extends ChangeNotifier {
       _errorText = 'Stop native monitoring failed: $error';
     }
     _isStreaming = false;
+    _observedFps = null;
+    _cameraFpsMode = null;
+    _targetFpsUpper = null;
     notifyListeners();
   }
 
@@ -197,6 +209,9 @@ class MotionDetectionController extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    if (type == 'native_diagnostic') {
+      return;
+    }
     if (type == 'native_frame_stats') {
       final frameSensorNanos = _readInt(event['frameSensorNanos']);
       final rawScore = _readDouble(event['rawScore']);
@@ -220,6 +235,12 @@ class MotionDetectionController extends ChangeNotifier {
       _gpsFixElapsedRealtimeNanos =
           _readInt(event['gpsFixElapsedRealtimeNanos']) ??
           _gpsFixElapsedRealtimeNanos;
+      _observedFps = _readDouble(event['observedFps']) ?? _observedFps;
+      _targetFpsUpper = _readInt(event['targetFpsUpper']) ?? _targetFpsUpper;
+      final cameraFpsMode = event['cameraFpsMode']?.toString();
+      if (cameraFpsMode != null && cameraFpsMode.isNotEmpty) {
+        _cameraFpsMode = cameraFpsMode;
+      }
       _latestStats = MotionFrameStats(
         rawScore: rawScore,
         baseline: baseline,

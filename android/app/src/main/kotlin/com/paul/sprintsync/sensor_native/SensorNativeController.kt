@@ -28,6 +28,7 @@ class SensorNativeController(
         private const val TAG = "SensorNativeController"
         private const val PREVIEW_REBIND_RETRY_DELAY_MS = 200L
         private const val PREVIEW_REBIND_MAX_ATTEMPTS = 3
+        private const val HS_FALLBACK_TRIGGER_FPS = 90.0
         const val METHOD_CHANNEL_NAME = "com.paul.sprintsync/sensor_native_methods"
         const val EVENT_CHANNEL_NAME = "com.paul.sprintsync/sensor_native_events"
         const val PREVIEW_VIEW_TYPE = "com.paul.sprintsync/sensor_native_preview"
@@ -36,6 +37,7 @@ class SensorNativeController(
     private val analyzerExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val frameDiffer = RoiFrameDiffer()
     private val offsetSmoother = SensorOffsetSmoother()
+    private val fpsMonitor = SensorNativeFpsMonitor(lowFpsThreshold = HS_FALLBACK_TRIGGER_FPS)
     @Volatile
     private var eventSink: EventChannel.EventSink? = null
     @Volatile
@@ -52,6 +54,16 @@ class SensorNativeController(
     private var gpsUtcOffsetNanos: Long? = null
     @Volatile
     private var gpsFixElapsedRealtimeNanos: Long? = null
+    @Volatile
+    private var requestedCameraFpsMode: NativeCameraFpsMode = NativeCameraFpsMode.HS120
+    @Volatile
+    private var activeCameraFpsMode: NativeCameraFpsMode = NativeCameraFpsMode.NORMAL
+    @Volatile
+    private var targetFpsUpper = 0
+    @Volatile
+    private var observedFps: Double? = null
+    @Volatile
+    private var hsDowngradeTriggered = false
     private var cameraProvider: ProcessCameraProvider? = null
     private var locationManager: LocationManager? = null
     private var previewView: PreviewView? = null
@@ -65,6 +77,7 @@ class SensorNativeController(
             analyzerExecutor = analyzerExecutor,
             analyzer = this,
             emitError = ::emitError,
+            emitDiagnostic = ::emitDiagnostic,
         )
     }
     private val gpsLocationListener = object : LocationListener {
@@ -138,6 +151,14 @@ class SensorNativeController(
             val frameSensorNanos = image.imageInfo.timestamp
             val offsetSample = frameSensorNanos - SystemClock.elapsedRealtimeNanos()
             val smoothedOffset = offsetSmoother.update(offsetSample)
+            val fpsObservation = fpsMonitor.update(
+                frameSensorNanos = frameSensorNanos,
+                mode = activeCameraFpsMode,
+            )
+            observedFps = fpsObservation.observedFps
+            if (fpsObservation.shouldDowngradeToNormal) {
+                requestHsFallbackToNormal()
+            }
             hostSensorMinusElapsedNanos = smoothedOffset
             val activeConfig = config
             if ((streamFrameCount % activeConfig.processEveryNFrames.toLong()) != 0L) {
@@ -209,7 +230,13 @@ class SensorNativeController(
         hostSensorMinusElapsedNanos = null
         gpsUtcOffsetNanos = null
         gpsFixElapsedRealtimeNanos = null
+        requestedCameraFpsMode = NativeCameraFpsMode.HS120
+        activeCameraFpsMode = NativeCameraFpsMode.NORMAL
+        targetFpsUpper = 0
+        observedFps = null
+        hsDowngradeTriggered = false
         offsetSmoother.reset()
+        fpsMonitor.reset()
         detectionMath.resetRun()
         frameDiffer.reset()
         startGpsUpdatesIfAvailable()
@@ -224,7 +251,9 @@ class SensorNativeController(
                         previewView = previewView,
                         includePreview = true,
                         preferredFacing = config.cameraFacing,
+                        preferredFpsMode = requestedCameraFpsMode,
                     )
+                    syncCameraFpsStateFromSession()
                     monitoring = true
                     schedulePreviewRebindRetriesIfMonitoring()
                     emitState("monitoring")
@@ -247,8 +276,14 @@ class SensorNativeController(
         streamFrameCount = 0L
         processedFrameCount = 0L
         hostSensorMinusElapsedNanos = null
+        requestedCameraFpsMode = NativeCameraFpsMode.HS120
+        activeCameraFpsMode = NativeCameraFpsMode.NORMAL
+        targetFpsUpper = 0
+        observedFps = null
+        hsDowngradeTriggered = false
         frameDiffer.reset()
         offsetSmoother.reset()
+        fpsMonitor.reset()
         detectionMath.resetRun()
         emitState("idle")
     }
@@ -285,11 +320,47 @@ class SensorNativeController(
                 previewView = previewView,
                 includePreview = true,
                 preferredFacing = config.cameraFacing,
+                preferredFpsMode = requestedCameraFpsMode,
             )
+            syncCameraFpsStateFromSession()
             true
         } catch (error: Exception) {
             emitError("Failed to bind preview surface: ${error.localizedMessage ?: "unknown"}")
             false
+        }
+    }
+
+    private fun syncCameraFpsStateFromSession() {
+        activeCameraFpsMode = cameraSession.currentCameraFpsMode()
+        targetFpsUpper = cameraSession.currentTargetFpsUpper()
+        if (activeCameraFpsMode == NativeCameraFpsMode.NORMAL) {
+            requestedCameraFpsMode = NativeCameraFpsMode.NORMAL
+        }
+        fpsMonitor.reset()
+        observedFps = null
+    }
+
+    private fun requestHsFallbackToNormal() {
+        if (hsDowngradeTriggered) {
+            return
+        }
+        if (requestedCameraFpsMode != NativeCameraFpsMode.HS120 ||
+            activeCameraFpsMode != NativeCameraFpsMode.HS120
+        ) {
+            return
+        }
+        hsDowngradeTriggered = true
+        requestedCameraFpsMode = NativeCameraFpsMode.NORMAL
+        emitDiagnostic(
+            "Observed FPS stayed below ${HS_FALLBACK_TRIGGER_FPS.toInt()} in HS mode; downgrading to normal.",
+        )
+        mainHandler.post {
+            if (!monitoring) {
+                return@post
+            }
+            if (!attemptPreviewRebind()) {
+                schedulePreviewRebindRetriesIfMonitoring()
+            }
         }
     }
 
@@ -379,6 +450,9 @@ class SensorNativeController(
                 "hostSensorMinusElapsedNanos" to sensorMinusElapsedNanos,
                 "gpsUtcOffsetNanos" to gpsUtcOffsetNanos,
                 "gpsFixElapsedRealtimeNanos" to gpsFixElapsedRealtimeNanos,
+                "observedFps" to observedFps,
+                "cameraFpsMode" to activeCameraFpsMode.wireName,
+                "targetFpsUpper" to targetFpsUpper,
             ),
         )
     }
@@ -409,6 +483,14 @@ class SensorNativeController(
         emitEvent(
             mapOf(
                 "type" to "native_error",
+                "message" to message,
+            ),
+        )
+    }
+    private fun emitDiagnostic(message: String) {
+        emitEvent(
+            mapOf(
+                "type" to "native_diagnostic",
                 "message" to message,
             ),
         )

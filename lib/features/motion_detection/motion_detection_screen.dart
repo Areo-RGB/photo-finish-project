@@ -197,6 +197,37 @@ class _MotionDetectionScreenState extends State<MotionDetectionScreen>
                     ),
                   ),
                 ),
+                Align(
+                  alignment: Alignment.topRight,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: IgnorePointer(
+                      child: Container(
+                        key: const ValueKey<String>('preview_fps_overlay'),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.45),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          _fpsOverlayText(),
+                          key: const ValueKey<String>(
+                            'preview_fps_overlay_text',
+                          ),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white70,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -225,6 +256,26 @@ class _MotionDetectionScreenState extends State<MotionDetectionScreen>
   double _tripwireAlignmentForRoiCenter(double roiCenterX) {
     final clamped = roiCenterX.clamp(0.0, 1.0);
     return (clamped * 2.0) - 1.0;
+  }
+
+  String _fpsOverlayText() {
+    final observedFps = widget.controller.observedFps;
+    final modeLabel = _modeLabel(observedFps, widget.controller.cameraFpsMode);
+    final fpsLabel = observedFps == null
+        ? '--.-'
+        : observedFps.toStringAsFixed(1);
+    return '$fpsLabel fps · $modeLabel';
+  }
+
+  String _modeLabel(double? observedFps, String? cameraFpsMode) {
+    if (observedFps == null) {
+      return 'INIT';
+    }
+    return switch (cameraFpsMode) {
+      'hs120' => 'HS',
+      'normal' => 'NORMAL',
+      _ => 'NORMAL',
+    };
   }
 
   Widget _buildStopwatchCard() {
