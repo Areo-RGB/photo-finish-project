@@ -4,6 +4,7 @@ import android.hardware.camera2.CaptureRequest
 import android.os.Handler
 import android.os.SystemClock
 import android.util.Range
+import android.util.Size
 import androidx.camera.camera2.interop.Camera2CameraControl
 import androidx.camera.camera2.interop.CaptureRequestOptions
 import androidx.camera.core.Camera
@@ -24,6 +25,10 @@ internal class SensorNativeCameraSession(
     private val emitError: (String) -> Unit,
     private val emitDiagnostic: (String) -> Unit,
 ) {
+    companion object {
+        private val TARGET_MONITORING_SIZE = Size(640, 480)
+    }
+
     private var camera: Camera? = null
     private var bindGeneration = 0L
     private var pendingAeAwbLockRunnable: Runnable? = null
@@ -76,6 +81,7 @@ internal class SensorNativeCameraSession(
         val imageAnalysis = ImageAnalysis.Builder()
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
+            .setTargetResolution(TARGET_MONITORING_SIZE)
             .build()
         imageAnalysis.setAnalyzer(analyzerExecutor, analyzer)
 
@@ -96,7 +102,10 @@ internal class SensorNativeCameraSession(
 
         val localPreviewView = if (includePreview) previewView else null
         val preview = localPreviewView?.let { view ->
-            Preview.Builder().build().also { useCase ->
+            Preview.Builder()
+                .setTargetResolution(TARGET_MONITORING_SIZE)
+                .build()
+                .also { useCase ->
                 useCase.setSurfaceProvider(view.surfaceProvider)
             }
         }

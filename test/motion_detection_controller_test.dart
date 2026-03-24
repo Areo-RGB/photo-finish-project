@@ -254,6 +254,32 @@ void main() {
   );
 
   test(
+    'updateHighSpeedEnabled persists and pushes native config while streaming',
+    () async {
+      final bridge = _FakeNativeSensorBridge();
+      final controller = MotionDetectionController(
+        repository: LocalRepository(),
+        nativeSensorBridge: bridge,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+
+      await controller.startDetection();
+      expect(bridge.startConfigs, isNotEmpty);
+      expect(bridge.startConfigs.last['highSpeedEnabled'], isFalse);
+
+      await controller.updateHighSpeedEnabled(true);
+
+      expect(controller.config.highSpeedEnabled, isTrue);
+      expect(bridge.updateConfigs, isNotEmpty);
+      expect(bridge.updateConfigs.last['highSpeedEnabled'], isTrue);
+      final savedConfig = await LocalRepository().loadMotionConfig();
+      expect(savedConfig.highSpeedEnabled, isTrue);
+
+      controller.dispose();
+    },
+  );
+
+  test(
     'native_frame_stats parses observed fps, fps mode, and target upper fps',
     () async {
       final bridge = _FakeNativeSensorBridge();

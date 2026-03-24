@@ -142,6 +142,51 @@ class SensorNativeMathTest {
     }
 
     @Test
+    fun `selectFrameRateSelection uses 30-120 in hs mode when 120-120 is unavailable`() {
+        val ranges = setOf(
+            15 to 30,
+            30 to 120,
+            15 to 60,
+            60 to 60,
+        )
+
+        val selection = SensorNativeCameraPolicy.selectFrameRateSelectionBounds(
+            bounds = ranges,
+            preferredMode = NativeCameraFpsMode.HS120,
+        )
+
+        assertEquals(NativeCameraFpsMode.HS120, selection?.primaryMode)
+        assertEquals(30, selection?.primaryBounds?.first)
+        assertEquals(120, selection?.primaryBounds?.second)
+        assertEquals(60, selection?.fallbackBounds?.first)
+        assertEquals(60, selection?.fallbackBounds?.second)
+        assertFalse(selection?.fallbackActivated ?: true)
+    }
+
+    @Test
+    fun `runtime hs facing override forces rear only when selected facing has no hs support`() {
+        val forcedRear = SensorNativeCameraPolicy.resolveHsRuntimeFacing(
+            preferredFacing = NativeCameraFacing.FRONT,
+            preferredFacingSupportsHs = false,
+            rearFacingSupportsHs = true,
+        )
+        val keepFront = SensorNativeCameraPolicy.resolveHsRuntimeFacing(
+            preferredFacing = NativeCameraFacing.FRONT,
+            preferredFacingSupportsHs = true,
+            rearFacingSupportsHs = true,
+        )
+        val stayFrontWithoutRear = SensorNativeCameraPolicy.resolveHsRuntimeFacing(
+            preferredFacing = NativeCameraFacing.FRONT,
+            preferredFacingSupportsHs = false,
+            rearFacingSupportsHs = false,
+        )
+
+        assertEquals(NativeCameraFacing.REAR, forcedRear)
+        assertEquals(NativeCameraFacing.FRONT, keepFront)
+        assertEquals(NativeCameraFacing.FRONT, stayFrontWithoutRear)
+    }
+
+    @Test
     fun `fps monitor triggers hs downgrade when low fps persists past warmup window`() {
         val monitor = SensorNativeFpsMonitor(emaAlpha = 1.0)
         var frameNanos = 0L

@@ -55,7 +55,7 @@ class SensorNativeController(
     @Volatile
     private var gpsFixElapsedRealtimeNanos: Long? = null
     @Volatile
-    private var requestedCameraFpsMode: NativeCameraFpsMode = NativeCameraFpsMode.HS120
+    private var requestedCameraFpsMode: NativeCameraFpsMode = NativeCameraFpsMode.NORMAL
     @Volatile
     private var activeCameraFpsMode: NativeCameraFpsMode = NativeCameraFpsMode.NORMAL
     @Volatile
@@ -220,6 +220,7 @@ class SensorNativeController(
         }
         config = NativeMonitoringConfig.fromMap(call.argument<Any>("config"))
         detectionMath.updateConfig(config)
+        requestedCameraFpsMode = requestedFpsModeForConfig(config)
         if (monitoring) {
             emitState("monitoring")
             result.success(null)
@@ -230,7 +231,7 @@ class SensorNativeController(
         hostSensorMinusElapsedNanos = null
         gpsUtcOffsetNanos = null
         gpsFixElapsedRealtimeNanos = null
-        requestedCameraFpsMode = NativeCameraFpsMode.HS120
+        requestedCameraFpsMode = requestedFpsModeForConfig(config)
         activeCameraFpsMode = NativeCameraFpsMode.NORMAL
         targetFpsUpper = 0
         observedFps = null
@@ -276,7 +277,7 @@ class SensorNativeController(
         streamFrameCount = 0L
         processedFrameCount = 0L
         hostSensorMinusElapsedNanos = null
-        requestedCameraFpsMode = NativeCameraFpsMode.HS120
+        requestedCameraFpsMode = NativeCameraFpsMode.NORMAL
         activeCameraFpsMode = NativeCameraFpsMode.NORMAL
         targetFpsUpper = 0
         observedFps = null
@@ -289,9 +290,17 @@ class SensorNativeController(
     }
     private fun updateNativeConfig(call: MethodCall) {
         val previousFacing = config.cameraFacing
+        val previousHighSpeedEnabled = config.highSpeedEnabled
         config = NativeMonitoringConfig.fromMap(call.argument<Any>("config"))
         detectionMath.updateConfig(config)
-        if (monitoring && config.cameraFacing != previousFacing) {
+        requestedCameraFpsMode = requestedFpsModeForConfig(config)
+        if (requestedCameraFpsMode == NativeCameraFpsMode.HS120) {
+            hsDowngradeTriggered = false
+        }
+        if (monitoring &&
+            (config.cameraFacing != previousFacing ||
+                config.highSpeedEnabled != previousHighSpeedEnabled)
+        ) {
             rebindCameraUseCasesIfMonitoring()
         }
         emitState(if (monitoring) "monitoring" else "idle")
@@ -361,6 +370,16 @@ class SensorNativeController(
             if (!attemptPreviewRebind()) {
                 schedulePreviewRebindRetriesIfMonitoring()
             }
+        }
+    }
+
+    private fun requestedFpsModeForConfig(
+        activeConfig: NativeMonitoringConfig,
+    ): NativeCameraFpsMode {
+        return if (activeConfig.highSpeedEnabled) {
+            NativeCameraFpsMode.HS120
+        } else {
+            NativeCameraFpsMode.NORMAL
         }
     }
 

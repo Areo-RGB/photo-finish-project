@@ -183,6 +183,16 @@ class MotionDetectionController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> updateHighSpeedEnabled(bool enabled) async {
+    if (_config.highSpeedEnabled == enabled) {
+      return;
+    }
+    _config = _config.copyWith(highSpeedEnabled: enabled);
+    await _repository.saveMotionConfig(_config);
+    await _pushNativeConfig();
+    notifyListeners();
+  }
+
   Future<void> _pushNativeConfig() async {
     if (!_isStreaming) {
       return;
