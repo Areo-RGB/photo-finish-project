@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sprint_sync/core/repositories/local_repository.dart';
@@ -2042,6 +2043,170 @@ void main() {
   );
 
   test(
+    'client enqueues full clock sync burst before send futures resolve',
+    () async {
+      int nowElapsedNanos = 1200000000;
+      final fixture = _ControllerFixture.create(
+        nowElapsedNanos: () => nowElapsedNanos,
+      );
+      await fixture.controller.joinLobby();
+      fixture.bridge.emitEvent(<String, dynamic>{
+        'type': 'connection_result',
+        'endpointId': 'host-1',
+        'connected': true,
+      });
+      await _flushEvents();
+
+      fixture.nativeBridge.emitEvent(<String, dynamic>{
+        'type': 'native_state',
+        'hostSensorMinusElapsedNanos': 700000000,
+      });
+      fixture.nativeBridge.emitEvent(<String, dynamic>{
+        'type': 'native_frame_stats',
+        'frameSensorNanos': 2000000000,
+        'rawScore': 0.01,
+        'baseline': 0.01,
+        'effectiveScore': 0.0,
+      });
+      await _flushEvents();
+
+      fixture.bridge.sentPayloads.clear();
+      fixture.bridge.holdSendBytesCompletions = true;
+      fixture.bridge.emitEvent(<String, dynamic>{
+        'type': 'payload_received',
+        'endpointId': 'host-1',
+        'message': SessionSnapshotMessage(
+          stage: SessionStage.monitoring,
+          monitoringActive: true,
+          devices: const <SessionDevice>[
+            SessionDevice(
+              id: 'local-device',
+              name: 'Client',
+              role: SessionDeviceRole.start,
+              isLocal: false,
+            ),
+            SessionDevice(
+              id: 'host-1',
+              name: 'Host',
+              role: SessionDeviceRole.stop,
+              isLocal: false,
+            ),
+          ],
+          timeline: SessionRaceTimeline.idle(),
+          hostSensorMinusElapsedNanos: 120000000,
+          selfDeviceId: 'local-device',
+        ).toJsonString(),
+      });
+      await _flushEvents();
+
+      final syncRequests = fixture.bridge.sentPayloads
+          .map(
+            (payload) =>
+                SessionClockSyncRequestMessage.tryParse(payload.messageJson),
+          )
+          .whereType<SessionClockSyncRequestMessage>()
+          .toList();
+      expect(syncRequests, hasLength(10));
+
+      fixture.bridge.releaseSendBytesCompletions();
+      fixture.bridge.holdSendBytesCompletions = false;
+      await _flushEvents();
+      fixture.dispose();
+    },
+  );
+
+  test(
+    'failed clock sync sends are removed from pending set for future bursts',
+    () async {
+      int nowElapsedNanos = 1200000000;
+      final fixture = _ControllerFixture.create(
+        nowElapsedNanos: () => nowElapsedNanos,
+      );
+      await fixture.controller.joinLobby();
+      fixture.bridge.emitEvent(<String, dynamic>{
+        'type': 'connection_result',
+        'endpointId': 'host-1',
+        'connected': true,
+      });
+      await _flushEvents();
+
+      fixture.nativeBridge.emitEvent(<String, dynamic>{
+        'type': 'native_state',
+        'hostSensorMinusElapsedNanos': 700000000,
+      });
+      fixture.nativeBridge.emitEvent(<String, dynamic>{
+        'type': 'native_frame_stats',
+        'frameSensorNanos': 2000000000,
+        'rawScore': 0.01,
+        'baseline': 0.01,
+        'effectiveScore': 0.0,
+      });
+      await _flushEvents();
+
+      fixture.bridge.sentPayloads.clear();
+      fixture.bridge.failClockSyncRequests = true;
+      fixture.bridge.emitEvent(<String, dynamic>{
+        'type': 'payload_received',
+        'endpointId': 'host-1',
+        'message': SessionSnapshotMessage(
+          stage: SessionStage.monitoring,
+          monitoringActive: true,
+          devices: const <SessionDevice>[
+            SessionDevice(
+              id: 'local-device',
+              name: 'Client',
+              role: SessionDeviceRole.start,
+              isLocal: false,
+            ),
+            SessionDevice(
+              id: 'host-1',
+              name: 'Host',
+              role: SessionDeviceRole.stop,
+              isLocal: false,
+            ),
+          ],
+          timeline: SessionRaceTimeline.idle(),
+          hostSensorMinusElapsedNanos: 120000000,
+          selfDeviceId: 'local-device',
+        ).toJsonString(),
+      });
+      await _flushEvents();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      final firstBurstCount = fixture.bridge.sentPayloads
+          .map(
+            (payload) =>
+                SessionClockSyncRequestMessage.tryParse(payload.messageJson),
+          )
+          .whereType<SessionClockSyncRequestMessage>()
+          .length;
+      expect(firstBurstCount, 10);
+
+      nowElapsedNanos += 1200000000;
+      fixture.nativeBridge.emitEvent(<String, dynamic>{
+        'type': 'native_frame_stats',
+        'frameSensorNanos': nowElapsedNanos + 500000000,
+        'rawScore': 0.01,
+        'baseline': 0.01,
+        'effectiveScore': 0.0,
+      });
+      await _flushEvents();
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+
+      final allRequests = fixture.bridge.sentPayloads
+          .map(
+            (payload) =>
+                SessionClockSyncRequestMessage.tryParse(payload.messageJson),
+          )
+          .whereType<SessionClockSyncRequestMessage>()
+          .toList();
+      expect(allRequests.length, greaterThanOrEqualTo(20));
+
+      fixture.dispose();
+    },
+  );
+
+  test(
     'client uses the lowest RTT sample from a sync burst for trigger mapping',
     () async {
       int nowElapsedNanos = 1200000000;
@@ -2690,6 +2855,9 @@ class _FakeNearbyBridge extends NearbyBridge {
   final StreamController<Map<String, dynamic>> _eventsController =
       StreamController<Map<String, dynamic>>.broadcast();
   final List<_SentPayload> sentPayloads = <_SentPayload>[];
+  bool holdSendBytesCompletions = false;
+  bool failClockSyncRequests = false;
+  final List<Completer<void>> _pendingSendCompletions = <Completer<void>>[];
   int startHostingCalls = 0;
   int startDiscoveryCalls = 0;
   NearbyConnectionStrategy? lastHostingStrategy;
@@ -2701,6 +2869,15 @@ class _FakeNearbyBridge extends NearbyBridge {
 
   void emitEvent(Map<String, dynamic> event) {
     _eventsController.add(event);
+  }
+
+  void releaseSendBytesCompletions() {
+    for (final completer in _pendingSendCompletions) {
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
+    }
+    _pendingSendCompletions.clear();
   }
 
   @override
@@ -2742,6 +2919,20 @@ class _FakeNearbyBridge extends NearbyBridge {
     sentPayloads.add(
       _SentPayload(endpointId: endpointId, messageJson: messageJson),
     );
+    final clockSyncRequest = SessionClockSyncRequestMessage.tryParse(
+      messageJson,
+    );
+    if (clockSyncRequest != null && failClockSyncRequests) {
+      throw PlatformException(
+        code: 'send_payload_failed',
+        message: 'Injected test failure for clock sync send.',
+      );
+    }
+    if (holdSendBytesCompletions) {
+      final completer = Completer<void>();
+      _pendingSendCompletions.add(completer);
+      await completer.future;
+    }
   }
 
   @override
@@ -2751,6 +2942,12 @@ class _FakeNearbyBridge extends NearbyBridge {
   Future<void> stopAll() async {
     stopAllCalls += 1;
   }
+
+  @override
+  Future<void> configureNativeClockSyncHost({
+    required bool enabled,
+    required bool requireSensorDomainClock,
+  }) async {}
 
   void dispose() {
     _eventsController.close();

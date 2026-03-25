@@ -29,12 +29,15 @@ import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.nio.charset.StandardCharsets
+import org.json.JSONException
+import org.json.JSONObject
 
 class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResultCallback {
     companion object {
         private const val METHOD_CHANNEL_NAME = "com.paul.sprintsync/nearby_methods"
         private const val EVENT_CHANNEL_NAME = "com.paul.sprintsync/nearby_events"
         private const val PERMISSIONS_REQUEST_CODE = 7301
+        private const val SENSOR_ELAPSED_PROJECTION_MAX_AGE_NANOS = 3_000_000_000L
     }
 
     private enum class NearbyRole {
@@ -72,6 +75,8 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
     private var activeStrategy: NearbyTransportStrategy = NearbyTransportStrategy.STAR
     private var pendingEndpointId: String? = null
     private var requestedEndpointId: String? = null
+    private var nativeClockSyncHostEnabled = false
+    private var nativeClockSyncRequireSensorDomain = false
     private val endpointNamesById = mutableMapOf<String, String>()
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -174,6 +179,9 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
                 val endpointId = stringArg(call, "endpointId", result) ?: return
                 val messageJson = stringArg(call, "messageJson", result) ?: return
                 sendBytes(endpointId, messageJson, result)
+            }
+            "configureNativeClockSyncHost" -> {
+                configureNativeClockSyncHost(call, result)
             }
 
             "disconnect" -> {
@@ -403,6 +411,12 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
             }
     }
 
+    private fun configureNativeClockSyncHost(call: MethodCall, result: MethodChannel.Result) {
+        nativeClockSyncHostEnabled = call.argument<Boolean>("enabled") == true
+        nativeClockSyncRequireSensorDomain = call.argument<Boolean>("requireSensorDomainClock") == true
+        result.success(null)
+    }
+
     private fun disconnect(endpointId: String) {
         connectionsClient.disconnectFromEndpoint(endpointId)
         clearEndpointState(endpointId)
@@ -474,6 +488,8 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
         requestedEndpointId = null
         connectedEndpointIds.clear()
         endpointNamesById.clear()
+        nativeClockSyncHostEnabled = false
+        nativeClockSyncRequireSensorDomain = false
     }
 
     private fun clearEndpointState(endpointId: String) {
@@ -613,6 +629,9 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
         override fun onPayloadReceived(endpointId: String, payload: Payload) {
             val bytes = payload.asBytes() ?: return
             val message = String(bytes, StandardCharsets.UTF_8)
+            if (tryRespondToClockSyncRequest(endpointId, message)) {
+                return
+            }
             emitEvent(
                 mapOf(
                     "type" to "payload_received",
@@ -625,6 +644,52 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
         override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {
             // Byte payloads are handled in onPayloadReceived; transfer progress is not needed for v1.
         }
+    }
+
+    private fun tryRespondToClockSyncRequest(endpointId: String, message: String): Boolean {
+        if (activeRole != NearbyRole.HOST || !nativeClockSyncHostEnabled) {
+            return false
+        }
+        if (!connectedEndpointIds.contains(endpointId)) {
+            return false
+        }
+        val request = try {
+            JSONObject(message)
+        } catch (_: JSONException) {
+            return false
+        }
+        if (request.optString("type") != "clock_sync_request") {
+            return false
+        }
+        if (!request.has("clientSendElapsedNanos")) {
+            return true
+        }
+        val clientSendElapsedNanos = request.optLong("clientSendElapsedNanos", Long.MIN_VALUE)
+        if (clientSendElapsedNanos == Long.MIN_VALUE) {
+            return true
+        }
+        val hostReceiveElapsedNanos = nowNativeClockSyncElapsedNanos() ?: return true
+        val hostSendElapsedNanos = nowNativeClockSyncElapsedNanos() ?: return true
+        val response = JSONObject()
+            .put("type", "clock_sync_response")
+            .put("clientSendElapsedNanos", clientSendElapsedNanos)
+            .put("hostReceiveElapsedNanos", hostReceiveElapsedNanos)
+            .put("hostSendElapsedNanos", hostSendElapsedNanos)
+            .toString()
+        val payload = Payload.fromBytes(response.toByteArray(StandardCharsets.UTF_8))
+        connectionsClient
+            .sendPayload(endpointId, payload)
+            .addOnFailureListener { error ->
+                emitError("native clock sync response failed: ${error.localizedMessage ?: "unknown"}")
+            }
+        return true
+    }
+
+    private fun nowNativeClockSyncElapsedNanos(): Long? {
+        return sensorNativeController.currentClockSyncElapsedNanos(
+            maxSensorSampleAgeNanos = SENSOR_ELAPSED_PROJECTION_MAX_AGE_NANOS,
+            requireSensorDomain = nativeClockSyncRequireSensorDomain,
+        )
     }
 
     private fun emitError(message: String) {

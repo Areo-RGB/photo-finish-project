@@ -67,6 +67,12 @@ class SensorNativeController(
     private var hostSensorMinusElapsedNanos: Long? = null
 
     @Volatile
+    private var lastSensorElapsedSampleNanos: Long? = null
+
+    @Volatile
+    private var lastSensorElapsedSampleCapturedAtNanos: Long? = null
+
+    @Volatile
     private var gpsUtcOffsetNanos: Long? = null
 
     @Volatile
@@ -191,6 +197,25 @@ class SensorNativeController(
                 rebindCameraUseCasesIfMonitoring()
             }
         }
+    }
+
+    fun currentClockSyncElapsedNanos(
+        maxSensorSampleAgeNanos: Long,
+        requireSensorDomain: Boolean,
+    ): Long? {
+        val nowElapsedNanos = SystemClock.elapsedRealtimeNanos()
+        val sampledElapsedNanos = lastSensorElapsedSampleNanos
+        val sampledCapturedAtNanos = lastSensorElapsedSampleCapturedAtNanos
+        if (sampledElapsedNanos != null && sampledCapturedAtNanos != null) {
+            val sampleAgeNanos = nowElapsedNanos - sampledCapturedAtNanos
+            if (sampleAgeNanos >= 0 && sampleAgeNanos <= maxSensorSampleAgeNanos) {
+                return sampledElapsedNanos + sampleAgeNanos
+            }
+        }
+        if (requireSensorDomain) {
+            return null
+        }
+        return nowElapsedNanos
     }
 
     override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
@@ -563,6 +588,8 @@ class SensorNativeController(
         streamFrameCount = 0L
         processedFrameCount = 0L
         hostSensorMinusElapsedNanos = null
+        lastSensorElapsedSampleNanos = null
+        lastSensorElapsedSampleCapturedAtNanos = null
         gpsUtcOffsetNanos = null
         gpsFixElapsedRealtimeNanos = null
         observedFps = null
@@ -636,8 +663,11 @@ class SensorNativeController(
 
     private fun updateStreamTelemetry(frameSensorNanos: Long): Long {
         streamFrameCount += 1
-        val offsetSample = frameSensorNanos - SystemClock.elapsedRealtimeNanos()
+        val elapsedNanos = SystemClock.elapsedRealtimeNanos()
+        val offsetSample = frameSensorNanos - elapsedNanos
         val smoothedOffset = offsetSmoother.update(offsetSample)
+        lastSensorElapsedSampleNanos = frameSensorNanos - smoothedOffset
+        lastSensorElapsedSampleCapturedAtNanos = elapsedNanos
         val fpsObservation = fpsMonitor.update(
             frameSensorNanos = frameSensorNanos,
             mode = activeCameraFpsMode,

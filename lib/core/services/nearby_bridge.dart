@@ -155,6 +155,16 @@ class NearbyBridge {
     });
   }
 
+  Future<void> configureNativeClockSyncHost({
+    required bool enabled,
+    required bool requireSensorDomainClock,
+  }) {
+    return _methodChannel.invokeMethod<void>('configureNativeClockSyncHost', {
+      'enabled': enabled,
+      'requireSensorDomainClock': requireSensorDomainClock,
+    });
+  }
+
   Future<void> disconnect({required String endpointId}) {
     return _methodChannel.invokeMethod<void>('disconnect', {
       'endpointId': endpointId,

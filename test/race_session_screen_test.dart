@@ -748,6 +748,12 @@ class _FakeNearbyBridge extends NearbyBridge {
   @override
   Future<void> stopAll() async {}
 
+  @override
+  Future<void> configureNativeClockSyncHost({
+    required bool enabled,
+    required bool requireSensorDomainClock,
+  }) async {}
+
   void dispose() {
     _eventsController.close();
   }

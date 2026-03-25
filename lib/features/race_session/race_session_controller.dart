@@ -50,6 +50,7 @@ class RaceSessionController extends ChangeNotifier {
       isLocal: true,
     );
     unawaited(_refreshPermissionStatusFromPlatform());
+    unawaited(_syncNativeClockSyncHostConfig());
   }
   static const String _serviceId = 'com.paul.sprintsync.nearby';
   static const String _localHostDeviceId = 'local-device';
@@ -399,6 +400,7 @@ class RaceSessionController extends ChangeNotifier {
     }
     _devices[deviceId] = _devices[deviceId]!.copyWith(role: role);
     notifyListeners();
+    unawaited(_syncNativeClockSyncHostConfig());
     unawaited(_broadcastSnapshot());
   }
 
@@ -431,6 +433,7 @@ class RaceSessionController extends ChangeNotifier {
     await _syncLocalMotionConfigFromDevices();
     _runId = _buildRunId();
     _monitoringActive = true;
+    unawaited(_syncNativeClockSyncHostConfig());
     _stage = SessionStage.monitoring;
     await _setWakeLockEnabled(true);
     _resetHostTriggerTimeline();
@@ -449,6 +452,7 @@ class RaceSessionController extends ChangeNotifier {
     await _runLocalPostRaceRefinementAsHost();
     await _stopLocalMonitoringCaptureIfRunning();
     _monitoringActive = false;
+    unawaited(_syncNativeClockSyncHostConfig());
     _stage = SessionStage.lobby;
     await _setWakeLockEnabled(false);
     notifyListeners();
@@ -1219,6 +1223,7 @@ class RaceSessionController extends ChangeNotifier {
     _bestClockSyncBurstRttNanos = null;
     _activeClockSyncBurstResponseCount = 0;
     _activeClockSyncBurstHighRttRejectCount = 0;
+    final requestSendFutures = <Future<void>>[];
     for (var i = 0; i < _clockSyncBurstCount; i += 1) {
       final sampledClientSendElapsedNanos = i == 0
           ? burstStartElapsedNanos
@@ -1233,12 +1238,23 @@ class RaceSessionController extends ChangeNotifier {
         uniqueClientSendElapsedNanos += 1;
       }
       _pendingClockSyncRequestSendNanos.add(uniqueClientSendElapsedNanos);
-      await _nearbyBridge.sendBytes(
-        endpointId: endpointId,
-        messageJson: SessionClockSyncRequestMessage(
-          clientSendElapsedNanos: uniqueClientSendElapsedNanos,
-        ).toJsonString(),
+      requestSendFutures.add(
+        _nearbyBridge
+            .sendBytes(
+              endpointId: endpointId,
+              messageJson: SessionClockSyncRequestMessage(
+                clientSendElapsedNanos: uniqueClientSendElapsedNanos,
+              ).toJsonString(),
+            )
+            .catchError((Object _) {
+              _pendingClockSyncRequestSendNanos.remove(
+                uniqueClientSendElapsedNanos,
+              );
+            }),
       );
+    }
+    if (requestSendFutures.isNotEmpty) {
+      await Future.wait<void>(requestSendFutures);
     }
     final timeoutStopwatch = Stopwatch()..start();
     while (_pendingClockSyncRequestSendNanos.isNotEmpty) {
@@ -1641,6 +1657,17 @@ class RaceSessionController extends ChangeNotifier {
     return _monitoringActive && localRole != SessionDeviceRole.unassigned;
   }
 
+  Future<void> _syncNativeClockSyncHostConfig() async {
+    try {
+      await _nearbyBridge.configureNativeClockSyncHost(
+        enabled: isHost,
+        requireSensorDomainClock: _requiresSensorDomainClockForHostSync(),
+      );
+    } catch (_) {
+      // Native bridge may be unavailable in tests and non-Android environments.
+    }
+  }
+
   int? _effectiveHostSensorMinusElapsedNanosForSnapshot() {
     final hostSensorMinusElapsedNanos =
         _motionController.sensorMinusElapsedNanos;
@@ -1730,6 +1757,7 @@ class RaceSessionController extends ChangeNotifier {
     _localDeviceId = _localHostDeviceId;
     _motionController.resetRace();
     _motionController.clearHsRefinementState();
+    unawaited(_syncNativeClockSyncHostConfig());
   }
 
   void _clearClockSyncLock() {
