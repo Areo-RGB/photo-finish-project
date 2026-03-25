@@ -1,5 +1,14 @@
 import 'package:flutter/services.dart';
 
+enum NearbyConnectionStrategy {
+  star('star'),
+  pointToPoint('point_to_point');
+
+  const NearbyConnectionStrategy(this.wireValue);
+
+  final String wireValue;
+}
+
 class NearbyConnectionResultEvent {
   const NearbyConnectionResultEvent({
     required this.endpointId,
@@ -97,10 +106,12 @@ class NearbyBridge {
   Future<void> startHosting({
     required String serviceId,
     required String endpointName,
+    NearbyConnectionStrategy strategy = NearbyConnectionStrategy.star,
   }) {
     return _methodChannel.invokeMethod<void>('startHosting', {
       'serviceId': serviceId,
       'endpointName': endpointName,
+      'strategy': strategy.wireValue,
     });
   }
 
@@ -111,10 +122,12 @@ class NearbyBridge {
   Future<void> startDiscovery({
     required String serviceId,
     required String endpointName,
+    NearbyConnectionStrategy strategy = NearbyConnectionStrategy.star,
   }) {
     return _methodChannel.invokeMethod<void>('startDiscovery', {
       'serviceId': serviceId,
       'endpointName': endpointName,
+      'strategy': strategy.wireValue,
     });
   }
 

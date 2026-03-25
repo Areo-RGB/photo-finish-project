@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:sprint_sync/core/repositories/local_repository.dart';
 import 'package:sprint_sync/core/services/native_sensor_bridge.dart';
 import 'package:sprint_sync/core/services/nearby_bridge.dart';
@@ -9,7 +8,6 @@ import 'package:sprint_sync/features/race_session/race_session_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: '.env', isOptional: true);
   runApp(const SprintSyncApp());
 }
 

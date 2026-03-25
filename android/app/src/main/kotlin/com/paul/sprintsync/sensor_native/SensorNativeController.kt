@@ -108,19 +108,6 @@ class SensorNativeController(
         )
     }
 
-    private val hsRecordingManager: Camera2HsRecordingManager by lazy {
-        Camera2HsRecordingManager(
-            activity = activity,
-            mainHandler = mainHandler,
-            emitError = ::emitError,
-            emitDiagnostic = ::emitDiagnostic,
-        )
-    }
-
-    @Volatile
-    private var recordingRunId: String? = null
-    private val recordedArtifactsByRunId = mutableMapOf<String, HsRecordedVideoArtifact>()
-
     private val gpsLocationListener = object : LocationListener {
         override fun onLocationChanged(location: Location) {
             val utcNanos = location.time * 1_000_000L
@@ -180,8 +167,6 @@ class SensorNativeController(
         cancelPreviewRebindRetries()
         stopGpsUpdates()
         stopNativeMonitoringInternal()
-        clearRecordedArtifacts()
-        hsRecordingManager.release()
         analyzerExecutor.shutdown()
     }
 
@@ -339,15 +324,6 @@ class SensorNativeController(
             "refineHsTriggers" -> {
                 refineHsTriggers(call, result)
             }
-            "startHighSpeedRecording" -> {
-                startHighSpeedRecording(call, result)
-            }
-            "stopHighSpeedRecording" -> {
-                stopHighSpeedRecording(result)
-            }
-            "analyzeHighSpeedRecording" -> {
-                analyzeHighSpeedRecording(call, result)
-            }
             else -> result.notImplemented()
         }
     }
@@ -455,176 +431,6 @@ class SensorNativeController(
         }
     }
 
-    private fun startHighSpeedRecording(call: MethodCall, result: MethodChannel.Result) {
-        val permission = ContextCompat.checkSelfPermission(activity, Manifest.permission.CAMERA)
-        if (permission != PackageManager.PERMISSION_GRANTED) {
-            val message = "Camera permission is required before starting HS recording."
-            emitError(message)
-            result.error("camera_permission_denied", message, null)
-            return
-        }
-        if (monitoring) {
-            val message = "Cannot start HS recording while live monitoring is active."
-            result.error("hs_recording_conflict", message, null)
-            return
-        }
-        if (recordingRunId != null) {
-            result.error("hs_recording_conflict", "HS recording is already active.", null)
-            return
-        }
-        val runId = call.argument<String>("runId")?.trim().orEmpty()
-        if (runId.isEmpty()) {
-            result.error("invalid_args", "runId is required.", null)
-            return
-        }
-        val preferredFacing = nativeCameraFacingFromWire(call.argument<String>("cameraFacing"))
-            ?: config.cameraFacing
-        val handled = AtomicBoolean(false)
-        hsRecordingManager.start(
-            runId = runId,
-            preferredFacing = preferredFacing,
-            onStarted = { fpsUpper ->
-                mainHandler.post {
-                    if (!handled.compareAndSet(false, true)) {
-                        return@post
-                    }
-                    recordingRunId = runId
-                    activeCameraFpsMode = NativeCameraFpsMode.HS120
-                    targetFpsUpper = fpsUpper
-                    emitRecordingState(runId = runId, state = "recording", targetFps = fpsUpper)
-                    result.success(
-                        mapOf(
-                            "started" to true,
-                            "runId" to runId,
-                            "targetFpsUpper" to fpsUpper,
-                        ),
-                    )
-                }
-            },
-            onStartError = { message ->
-                mainHandler.post {
-                    if (!handled.compareAndSet(false, true)) {
-                        return@post
-                    }
-                    recordingRunId = null
-                    activeCameraFpsMode = NativeCameraFpsMode.NORMAL
-                    targetFpsUpper = null
-                    emitRecordingState(runId = runId, state = "error", message = message)
-                    result.error("hs_recording_start_failed", message, null)
-                }
-            },
-        )
-    }
-
-    private fun stopHighSpeedRecording(result: MethodChannel.Result) {
-        val runId = recordingRunId
-        val artifact = hsRecordingManager.stop()
-        recordingRunId = null
-        activeCameraFpsMode = NativeCameraFpsMode.NORMAL
-        targetFpsUpper = null
-        if (artifact != null) {
-            synchronized(recordedArtifactsByRunId) {
-                recordedArtifactsByRunId[artifact.runId] = artifact
-            }
-            emitRecordingState(
-                runId = artifact.runId,
-                state = "stopped",
-                recordedFrameCount = min(artifact.captureSensorNanos.size, artifact.encodedPtsUs.size),
-            )
-            result.success(
-                mapOf(
-                    "stopped" to true,
-                    "runId" to artifact.runId,
-                    "outputPath" to artifact.outputPath,
-                    "recordedFrameCount" to min(artifact.captureSensorNanos.size, artifact.encodedPtsUs.size),
-                ),
-            )
-            return
-        }
-        if (runId != null) {
-            emitRecordingState(runId = runId, state = "stopped", message = "No recording artifact produced.")
-        }
-        result.success(
-            mapOf(
-                "stopped" to true,
-                "runId" to runId,
-                "recordedFrameCount" to 0,
-            ),
-        )
-    }
-
-    private fun analyzeHighSpeedRecording(call: MethodCall, result: MethodChannel.Result) {
-        try {
-            val runId = call.argument<String>("runId")?.trim().orEmpty()
-            if (runId.isEmpty()) {
-                result.error("invalid_args", "runId is required.", null)
-                return
-            }
-            val triggerType = call.argument<String>("triggerType")?.trim().orEmpty()
-            if (triggerType.isEmpty()) {
-                result.error("invalid_args", "triggerType is required.", null)
-                return
-            }
-            val splitIndex = (call.argument<Number>("splitIndex")?.toInt()) ?: 0
-            val direction = hsScanDirectionFromWire(call.argument<String>("scanDirection"))
-                ?: HsScanDirection.FORWARD
-            val artifact = synchronized(recordedArtifactsByRunId) {
-                recordedArtifactsByRunId[runId]
-            }
-            if (artifact == null) {
-                result.success(
-                    mapOf(
-                        "runId" to runId,
-                        "triggerType" to triggerType,
-                        "splitIndex" to splitIndex,
-                        "scanDirection" to direction.wireName,
-                        "resolved" to false,
-                        "diagnostics" to "Recording artifact not available.",
-                    ),
-                )
-                return
-            }
-            val analysis = HsRecordedVideoAnalyzer.analyze(
-                artifact = artifact,
-                triggerType = triggerType,
-                splitIndex = splitIndex,
-                scanDirection = direction,
-                threshold = config.threshold,
-                roiCenterX = config.roiCenterX,
-                roiWidth = config.roiWidth,
-            )
-            synchronized(recordedArtifactsByRunId) {
-                recordedArtifactsByRunId.remove(runId)
-            }
-            File(artifact.outputPath).delete()
-            emitRecordingState(
-                runId = runId,
-                state = "analyzed",
-                message = if (analysis.resolved) "Resolved." else (analysis.diagnostics ?: "Unresolved."),
-            )
-            result.success(
-                mapOf(
-                    "runId" to analysis.runId,
-                    "triggerType" to analysis.triggerType,
-                    "splitIndex" to analysis.splitIndex,
-                    "scanDirection" to analysis.scanDirection.wireName,
-                    "resolved" to analysis.resolved,
-                    "localSensorNanos" to analysis.localSensorNanos,
-                    "rawScore" to analysis.rawScore,
-                    "baseline" to analysis.baseline,
-                    "effectiveScore" to analysis.effectiveScore,
-                    "diagnostics" to analysis.diagnostics,
-                ),
-            )
-        } catch (error: Exception) {
-            result.error(
-                "hs_recording_analyze_failed",
-                error.localizedMessage ?: "Failed to analyze HS recording.",
-                null,
-            )
-        }
-    }
-
     private fun startMonitoringBackend(
         onStarted: () -> Unit,
         onError: (String) -> Unit,
@@ -697,13 +503,6 @@ class SensorNativeController(
     private fun stopNativeMonitoringInternal() {
         cancelPreviewRebindRetries()
         monitoring = false
-        val recordingArtifact = hsRecordingManager.stop()
-        if (recordingArtifact != null) {
-            synchronized(recordedArtifactsByRunId) {
-                recordedArtifactsByRunId[recordingArtifact.runId] = recordingArtifact
-            }
-        }
-        recordingRunId = null
         stopGpsUpdates()
         cameraSession.stop(cameraProvider)
         cameraProvider = null
@@ -757,7 +556,6 @@ class SensorNativeController(
         detectionMath.resetRun()
         frameDiffer.reset()
         hsRoiRecorder.clear()
-        clearRecordedArtifacts()
         emitState(if (monitoring) "monitoring" else "idle")
     }
 
@@ -774,17 +572,6 @@ class SensorNativeController(
         fpsMonitor.reset()
         detectionMath.resetRun()
         frameDiffer.reset()
-    }
-
-    private fun clearRecordedArtifacts() {
-        val artifacts = synchronized(recordedArtifactsByRunId) {
-            val copied = recordedArtifactsByRunId.values.toList()
-            recordedArtifactsByRunId.clear()
-            copied
-        }
-        for (artifact in artifacts) {
-            File(artifact.outputPath).delete()
-        }
     }
 
     private fun rebindCameraUseCasesIfMonitoring() {
@@ -945,25 +732,6 @@ class SensorNativeController(
                 "hostSensorMinusElapsedNanos" to hostSensorMinusElapsedNanos,
                 "gpsUtcOffsetNanos" to gpsUtcOffsetNanos,
                 "gpsFixElapsedRealtimeNanos" to gpsFixElapsedRealtimeNanos,
-            ),
-        )
-    }
-
-    private fun emitRecordingState(
-        runId: String,
-        state: String,
-        targetFps: Int? = null,
-        recordedFrameCount: Int? = null,
-        message: String? = null,
-    ) {
-        emitEvent(
-            mapOf(
-                "type" to "hs_recording_state",
-                "runId" to runId,
-                "state" to state,
-                "targetFpsUpper" to targetFps,
-                "recordedFrameCount" to recordedFrameCount,
-                "message" to message,
             ),
         )
     }

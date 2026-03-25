@@ -37,8 +37,6 @@ class _RaceSessionScreenState extends State<RaceSessionScreen> {
             return _buildLobbyScaffold(context);
           case SessionStage.monitoring:
             return _buildMonitoringScaffold(context);
-          case SessionStage.recording:
-            return _buildRecordingScaffold(context);
         }
       },
     );
@@ -95,12 +93,32 @@ class _RaceSessionScreenState extends State<RaceSessionScreen> {
                         label: const Text('Host'),
                       ),
                       FilledButton.icon(
+                        key: const ValueKey<String>(
+                          'host_point_to_point_button',
+                        ),
+                        onPressed: controller.busy
+                            ? null
+                            : controller.createLobbyPointToPoint,
+                        icon: const Icon(Icons.wifi_tethering, size: 18),
+                        label: const Text('Host 1:1'),
+                      ),
+                      FilledButton.icon(
                         key: const ValueKey<String>('join_button'),
                         onPressed: controller.busy
                             ? null
                             : controller.joinLobby,
                         icon: const Icon(Icons.search, size: 18),
                         label: const Text('Join'),
+                      ),
+                      FilledButton.icon(
+                        key: const ValueKey<String>(
+                          'join_point_to_point_button',
+                        ),
+                        onPressed: controller.busy
+                            ? null
+                            : controller.joinLobbyPointToPoint,
+                        icon: const Icon(Icons.person_search, size: 18),
+                        label: const Text('Join 1:1'),
                       ),
                       if (controller.canGoToLobby)
                         FilledButton.icon(
@@ -211,13 +229,10 @@ class _RaceSessionScreenState extends State<RaceSessionScreen> {
                   ...controller.devices.map((device) {
                     return _buildRoleRow(device);
                   }),
-                  if (controller.refinementStatusText != null ||
-                      controller.recordingStatusText != null) ...[
+                  if (controller.refinementStatusText != null) ...[
                     const SizedBox(height: 8),
                     Text(
-                      controller.recordingStatusText != null
-                          ? 'Recording: ${controller.recordingStatusText}'
-                          : 'Refinement: ${controller.refinementStatusText}',
+                      'Refinement: ${controller.refinementStatusText}',
                       key: const ValueKey<String>(
                         'lobby_refinement_status_text',
                       ),
@@ -252,14 +267,15 @@ class _RaceSessionScreenState extends State<RaceSessionScreen> {
                         icon: const Icon(Icons.videocam),
                         label: const Text('Start Monitoring'),
                       ),
-                      FilledButton.icon(
-                        key: const ValueKey<String>('start_recording_button'),
-                        onPressed: controller.canStartRecording
-                            ? controller.startRecording
-                            : null,
-                        icon: const Icon(Icons.fiber_manual_record),
-                        label: const Text('Start Recording'),
-                      ),
+                      if (controller.isHost)
+                        FilledButton.icon(
+                          key: const ValueKey<String>('stop_hosting_button'),
+                          onPressed: controller.busy
+                              ? null
+                              : controller.stopHostingAndReturnToSetup,
+                          icon: const Icon(Icons.stop_circle_outlined),
+                          label: const Text('Stop Hosting'),
+                        ),
                       if (controller.isHost && controller.timeline.hasStarted)
                         FilledButton.icon(
                           onPressed: controller.resetRun,
@@ -443,60 +459,6 @@ class _RaceSessionScreenState extends State<RaceSessionScreen> {
               showPreview: effectiveShowPreview,
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRecordingScaffold(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'HS Recording',
-          key: ValueKey<String>('recording_stage_title'),
-        ),
-        actions: [
-          if (controller.isHost)
-            TextButton(
-              key: const ValueKey<String>('stop_recording_button'),
-              onPressed: controller.recordingActive
-                  ? controller.stopRecording
-                  : null,
-              child: const Text('Stop'),
-            ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Recording Status',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    controller.recordingStatusText ??
-                        (controller.recordingActive
-                            ? 'Recording in progress...'
-                            : 'Waiting for analysis.'),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Role: ${sessionDeviceRoleLabel(controller.localRole)}',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _buildTimelineCard(),
         ],
       ),
     );

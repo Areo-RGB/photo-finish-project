@@ -86,6 +86,69 @@ void main() {
     fixture.dispose();
   });
 
+  testWidgets('setup shows dedicated Host 1:1 and Join 1:1 buttons', (
+    tester,
+  ) async {
+    final fixture = _ScreenFixture.create();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RaceSessionScreen(
+          controller: fixture.controller,
+          motionController: fixture.motionController,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 20));
+
+    expect(
+      find.byKey(const ValueKey<String>('host_point_to_point_button')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('join_point_to_point_button')),
+      findsOneWidget,
+    );
+
+    fixture.dispose();
+  });
+
+  testWidgets('Host 1:1 and Join 1:1 use point-to-point strategy', (
+    tester,
+  ) async {
+    final fixture = _ScreenFixture.create();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RaceSessionScreen(
+          controller: fixture.controller,
+          motionController: fixture.motionController,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 20));
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('host_point_to_point_button')),
+    );
+    await tester.pump(const Duration(milliseconds: 20));
+    expect(
+      fixture.bridge.lastHostingStrategy,
+      NearbyConnectionStrategy.pointToPoint,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('join_point_to_point_button')),
+    );
+    await tester.pump(const Duration(milliseconds: 20));
+    expect(
+      fixture.bridge.lastDiscoveryStrategy,
+      NearbyConnectionStrategy.pointToPoint,
+    );
+
+    fixture.dispose();
+  });
+
   testWidgets('setup transitions to lobby after two devices are connected', (
     tester,
   ) async {
@@ -117,6 +180,44 @@ void main() {
     await tester.pump(const Duration(milliseconds: 20));
     expect(find.text('Race Lobby'), findsOneWidget);
 
+    fixture.dispose();
+  });
+
+  testWidgets('lobby shows stop hosting button for host and returns to setup', (
+    tester,
+  ) async {
+    final fixture = _ScreenFixture.create();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RaceSessionScreen(
+          controller: fixture.controller,
+          motionController: fixture.motionController,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 20));
+
+    await tester.tap(find.text('Host'));
+    await tester.pump(const Duration(milliseconds: 20));
+    fixture.bridge.emitEvent(<String, dynamic>{
+      'type': 'connection_result',
+      'endpointId': 'peer-1',
+      'connected': true,
+    });
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.tap(find.text('Next'));
+    await tester.pump(const Duration(milliseconds: 20));
+
+    final stopHostingButton = find.byKey(
+      const ValueKey<String>('stop_hosting_button'),
+    );
+    expect(stopHostingButton, findsOneWidget);
+
+    await tester.tap(stopHostingButton);
+    await tester.pump(const Duration(milliseconds: 120));
+
+    expect(find.text('Setup Session'), findsOneWidget);
     fixture.dispose();
   });
 
@@ -273,6 +374,7 @@ void main() {
       fixture.controller.assignRole('peer-1', SessionDeviceRole.stop);
       await tester.pump(const Duration(milliseconds: 20));
 
+      expect(find.text('Start Recording'), findsNothing);
       await tester.tap(find.text('Start Monitoring'));
       await tester.pump(const Duration(milliseconds: 120));
 
@@ -294,54 +396,6 @@ void main() {
       fixture.dispose();
     },
   );
-
-  testWidgets('recording stage is reachable from lobby via Start Recording', (
-    tester,
-  ) async {
-    final fixture = _ScreenFixture.create();
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: RaceSessionScreen(
-          controller: fixture.controller,
-          motionController: fixture.motionController,
-        ),
-      ),
-    );
-    await tester.pump(const Duration(milliseconds: 20));
-
-    await tester.tap(find.text('Host'));
-    await tester.pump(const Duration(milliseconds: 20));
-
-    fixture.bridge.emitEvent(<String, dynamic>{
-      'type': 'connection_result',
-      'endpointId': 'peer-1',
-      'connected': true,
-    });
-    await tester.pump(const Duration(milliseconds: 20));
-
-    await tester.tap(find.text('Next'));
-    await tester.pump(const Duration(milliseconds: 20));
-
-    fixture.controller.assignRole('local-device', SessionDeviceRole.start);
-    fixture.controller.assignRole('peer-1', SessionDeviceRole.stop);
-    await tester.pump(const Duration(milliseconds: 20));
-
-    await tester.tap(find.text('Start Recording'));
-    await tester.pump(const Duration(milliseconds: 120));
-
-    expect(
-      find.byKey(const ValueKey<String>('recording_stage_title')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey<String>('stop_recording_button')),
-      findsOneWidget,
-    );
-    expect(find.textContaining('Recording in progress'), findsOneWidget);
-
-    fixture.dispose();
-  });
 
   testWidgets(
     'monitoring shows warning banner when client clock lock is invalid',
@@ -405,6 +459,43 @@ void main() {
       fixture.dispose();
     },
   );
+
+  testWidgets('client returns to setup screen when host disconnects', (
+    tester,
+  ) async {
+    final fixture = _ScreenFixture.create();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RaceSessionScreen(
+          controller: fixture.controller,
+          motionController: fixture.motionController,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 20));
+
+    await fixture.controller.joinLobby();
+    fixture.bridge.emitEvent(<String, dynamic>{
+      'type': 'connection_result',
+      'endpointId': 'host-1',
+      'connected': true,
+    });
+    await tester.pump(const Duration(milliseconds: 20));
+    fixture.controller.goToLobby();
+    await tester.pump(const Duration(milliseconds: 20));
+    expect(find.text('Race Lobby'), findsOneWidget);
+
+    fixture.bridge.emitEvent(<String, dynamic>{
+      'type': 'endpoint_disconnected',
+      'endpointId': 'host-1',
+    });
+    await tester.pump(const Duration(milliseconds: 120));
+    await tester.pump(const Duration(milliseconds: 20));
+
+    expect(find.text('Setup Session'), findsOneWidget);
+    fixture.dispose();
+  });
 
   testWidgets(
     'lobby shows post-race section with no correction delta when unchanged',
@@ -583,35 +674,6 @@ class _FakeNativeSensorBridge extends NativeSensorBridge {
     return Map<String, dynamic>.from(refineResponse);
   }
 
-  @override
-  Future<Map<String, dynamic>> startHighSpeedRecording({
-    required String runId,
-    required String cameraFacing,
-  }) async {
-    return <String, dynamic>{'started': true, 'runId': runId};
-  }
-
-  @override
-  Future<Map<String, dynamic>> stopHighSpeedRecording() async {
-    return <String, dynamic>{'stopped': true};
-  }
-
-  @override
-  Future<Map<String, dynamic>> analyzeHighSpeedRecording({
-    required String runId,
-    required String triggerType,
-    required int splitIndex,
-    required String scanDirection,
-  }) async {
-    return <String, dynamic>{
-      'runId': runId,
-      'triggerType': triggerType,
-      'splitIndex': splitIndex,
-      'scanDirection': scanDirection,
-      'resolved': false,
-    };
-  }
-
   void dispose() {
     _eventsController.close();
   }
@@ -624,6 +686,8 @@ class _FakeNearbyBridge extends NearbyBridge {
   final StreamController<Map<String, dynamic>> _eventsController =
       StreamController<Map<String, dynamic>>.broadcast();
   bool _permissionsGranted;
+  NearbyConnectionStrategy? lastHostingStrategy;
+  NearbyConnectionStrategy? lastDiscoveryStrategy;
 
   @override
   Stream<Map<String, dynamic>> get events => _eventsController.stream;
@@ -652,13 +716,19 @@ class _FakeNearbyBridge extends NearbyBridge {
   Future<void> startHosting({
     required String serviceId,
     required String endpointName,
-  }) async {}
+    NearbyConnectionStrategy strategy = NearbyConnectionStrategy.star,
+  }) async {
+    lastHostingStrategy = strategy;
+  }
 
   @override
   Future<void> startDiscovery({
     required String serviceId,
     required String endpointName,
-  }) async {}
+    NearbyConnectionStrategy strategy = NearbyConnectionStrategy.star,
+  }) async {
+    lastDiscoveryStrategy = strategy;
+  }
 
   @override
   Future<void> requestConnection({

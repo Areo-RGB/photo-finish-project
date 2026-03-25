@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-enum SessionStage { setup, lobby, monitoring, recording }
+enum SessionStage { setup, lobby, monitoring }
 
 enum SessionNetworkRole { none, host, client }
 
@@ -157,7 +157,6 @@ class SessionSnapshotMessage {
   const SessionSnapshotMessage({
     required this.stage,
     required this.monitoringActive,
-    this.recordingActive = false,
     required this.devices,
     required this.timeline,
     this.runId,
@@ -169,7 +168,6 @@ class SessionSnapshotMessage {
 
   final SessionStage stage;
   final bool monitoringActive;
-  final bool recordingActive;
   final List<SessionDevice> devices;
   final SessionRaceTimeline timeline;
   final String? runId;
@@ -183,7 +181,6 @@ class SessionSnapshotMessage {
       'type': 'snapshot',
       'stage': stage.name,
       'monitoringActive': monitoringActive,
-      'recordingActive': recordingActive,
       'devices': devices.map((device) => device.toJson()).toList(),
       'timeline': timeline.toJson(),
       'runId': runId,
@@ -207,7 +204,6 @@ class SessionSnapshotMessage {
         return null;
       }
       final monitoringActive = decoded['monitoringActive'] == true;
-      final recordingActive = decoded['recordingActive'] == true;
       final devicesRaw = decoded['devices'];
       if (devicesRaw is! List) {
         return null;
@@ -225,7 +221,6 @@ class SessionSnapshotMessage {
       return SessionSnapshotMessage(
         stage: stage,
         monitoringActive: monitoringActive,
-        recordingActive: recordingActive,
         devices: devices,
         timeline: SessionRaceTimeline.fromJson(decoded['timeline']),
         runId: decoded['runId']?.toString(),
@@ -235,74 +230,6 @@ class SessionSnapshotMessage {
             ?.toInt(),
         hostGpsFixAgeNanos: (decoded['hostGpsFixAgeNanos'] as num?)?.toInt(),
         selfDeviceId: decoded['selfDeviceId']?.toString(),
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-}
-
-class SessionRecordingAnalysisResultMessage {
-  const SessionRecordingAnalysisResultMessage({
-    required this.runId,
-    required this.role,
-    required this.resolved,
-    required this.splitIndex,
-    this.localSensorNanos,
-    this.mappedHostSensorNanos,
-    this.diagnostics,
-  });
-
-  final String runId;
-  final SessionDeviceRole role;
-  final bool resolved;
-  final int splitIndex;
-  final int? localSensorNanos;
-  final int? mappedHostSensorNanos;
-  final String? diagnostics;
-
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'type': 'recording_analysis_result',
-      'runId': runId,
-      'role': role.name,
-      'resolved': resolved,
-      'splitIndex': splitIndex,
-      'localSensorNanos': localSensorNanos,
-      'mappedHostSensorNanos': mappedHostSensorNanos,
-      'diagnostics': diagnostics,
-    };
-  }
-
-  String toJsonString() => jsonEncode(toJson());
-
-  static SessionRecordingAnalysisResultMessage? tryParse(String raw) {
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! Map<String, dynamic> ||
-          decoded['type'] != 'recording_analysis_result') {
-        return null;
-      }
-      final runId = decoded['runId']?.toString();
-      final role = sessionDeviceRoleFromName(decoded['role']?.toString());
-      final resolved = decoded['resolved'];
-      final splitIndexRaw = decoded['splitIndex'];
-      if (runId == null ||
-          runId.isEmpty ||
-          role == null ||
-          resolved is! bool ||
-          splitIndexRaw is! num) {
-        return null;
-      }
-      return SessionRecordingAnalysisResultMessage(
-        runId: runId,
-        role: role,
-        resolved: resolved,
-        splitIndex: splitIndexRaw.toInt(),
-        localSensorNanos: (decoded['localSensorNanos'] as num?)?.toInt(),
-        mappedHostSensorNanos: (decoded['mappedHostSensorNanos'] as num?)
-            ?.toInt(),
-        diagnostics: decoded['diagnostics']?.toString(),
       );
     } catch (_) {
       return null;

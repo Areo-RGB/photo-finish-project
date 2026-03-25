@@ -216,7 +216,9 @@ class MotionDetectionController extends ChangeNotifier {
     if (!_isStreaming) {
       return;
     }
-    await _nativeSensorBridge.updateNativeConfig(config: _liveMonitoringConfigJson());
+    await _nativeSensorBridge.updateNativeConfig(
+      config: _liveMonitoringConfigJson(),
+    );
   }
 
   void _onNativeEvent(Map<String, dynamic> event) {
@@ -478,37 +480,6 @@ class MotionDetectionController extends ChangeNotifier {
 
   void clearHsRefinementState() {
     _clearHsRefinementTracking(notify: true);
-  }
-
-  Future<void> startHighSpeedRecording({
-    required String runId,
-  }) async {
-    _errorText = null;
-    await _nativeSensorBridge.startHighSpeedRecording(
-      runId: runId,
-      cameraFacing: _config.cameraFacing.name,
-    );
-  }
-
-  Future<void> stopHighSpeedRecording() async {
-    _errorText = null;
-    await _nativeSensorBridge.stopHighSpeedRecording();
-  }
-
-  Future<HsOfflineRecordingAnalysisResult?> analyzeHighSpeedRecording({
-    required String runId,
-    required MotionTriggerType triggerType,
-    required int splitIndex,
-    required HsScanDirection scanDirection,
-  }) async {
-    _errorText = null;
-    final response = await _nativeSensorBridge.analyzeHighSpeedRecording(
-      runId: runId,
-      triggerType: triggerType.name,
-      splitIndex: splitIndex,
-      scanDirection: scanDirection.name,
-    );
-    return HsOfflineRecordingAnalysisResult.fromJson(response);
   }
 
   void _addTriggerToHistory(MotionTriggerEvent trigger) {

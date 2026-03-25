@@ -1,3 +1,0 @@
-appId: com.paul.sprintsync
----
-- runFlow: .maestro/flows/navigation/navigation_core.yaml

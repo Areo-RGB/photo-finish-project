@@ -35,13 +35,30 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
         private const val METHOD_CHANNEL_NAME = "com.paul.sprintsync/nearby_methods"
         private const val EVENT_CHANNEL_NAME = "com.paul.sprintsync/nearby_events"
         private const val PERMISSIONS_REQUEST_CODE = 7301
-        private val STRATEGY = Strategy.P2P_STAR
     }
 
     private enum class NearbyRole {
         NONE,
         HOST,
         CLIENT,
+    }
+
+    private enum class NearbyTransportStrategy(
+        val wireValue: String,
+        val nearbyStrategy: Strategy,
+    ) {
+        STAR("star", Strategy.P2P_STAR),
+        POINT_TO_POINT("point_to_point", Strategy.P2P_POINT_TO_POINT),
+        ;
+
+        companion object {
+            fun fromWireValue(rawValue: String?): NearbyTransportStrategy {
+                return when (rawValue?.trim()) {
+                    POINT_TO_POINT.wireValue -> POINT_TO_POINT
+                    else -> STAR
+                }
+            }
+        }
     }
 
     private val connectedEndpointIds = mutableSetOf<String>()
@@ -52,6 +69,7 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
     private var eventSink: EventChannel.EventSink? = null
     private var pendingPermissionResult: MethodChannel.Result? = null
     private var activeRole: NearbyRole = NearbyRole.NONE
+    private var activeStrategy: NearbyTransportStrategy = NearbyTransportStrategy.STAR
     private var pendingEndpointId: String? = null
     private var requestedEndpointId: String? = null
     private val endpointNamesById = mutableMapOf<String, String>()
@@ -126,7 +144,8 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
             "startHosting" -> {
                 val serviceId = stringArg(call, "serviceId", result) ?: return
                 val endpointName = stringArg(call, "endpointName", result) ?: return
-                startHosting(serviceId, endpointName, result)
+                val strategy = strategyArg(call)
+                startHosting(serviceId, endpointName, strategy, result)
             }
 
             "stopHosting" -> {
@@ -136,7 +155,8 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
 
             "startDiscovery" -> {
                 val serviceId = stringArg(call, "serviceId", result) ?: return
-                startDiscovery(serviceId, result)
+                val strategy = strategyArg(call)
+                startDiscovery(serviceId, strategy, result)
             }
 
             "stopDiscovery" -> {
@@ -182,6 +202,11 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
             return null
         }
         return value
+    }
+
+    private fun strategyArg(call: MethodCall): NearbyTransportStrategy {
+        val value = call.argument<String>("strategy")
+        return NearbyTransportStrategy.fromWireValue(value)
     }
 
     private fun localEndpointName(): String {
@@ -260,12 +285,13 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
     private fun startHosting(
         serviceId: String,
         endpointName: String,
+        strategy: NearbyTransportStrategy,
         result: MethodChannel.Result,
     ) {
-        normalizeForRole(NearbyRole.HOST)
+        normalizeForRole(NearbyRole.HOST, strategy)
         val effectiveEndpointName = localEndpointName().takeIf { it.isNotBlank() } ?: endpointName
         val options = AdvertisingOptions.Builder()
-            .setStrategy(STRATEGY)
+            .setStrategy(strategy.nearbyStrategy)
             .build()
         connectionsClient
             .startAdvertising(effectiveEndpointName, serviceId, connectionLifecycleCallback, options)
@@ -282,15 +308,17 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
         connectionsClient.stopAllEndpoints()
         clearTransientState()
         activeRole = NearbyRole.NONE
+        activeStrategy = NearbyTransportStrategy.STAR
     }
 
     private fun startDiscovery(
         serviceId: String,
+        strategy: NearbyTransportStrategy,
         result: MethodChannel.Result,
     ) {
-        normalizeForRole(NearbyRole.CLIENT)
+        normalizeForRole(NearbyRole.CLIENT, strategy)
         val options = DiscoveryOptions.Builder()
-            .setStrategy(STRATEGY)
+            .setStrategy(strategy.nearbyStrategy)
             .build()
         connectionsClient
             .startDiscovery(serviceId, endpointDiscoveryCallback, options)
@@ -307,6 +335,7 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
         connectionsClient.stopAllEndpoints()
         clearTransientState()
         activeRole = NearbyRole.NONE
+        activeStrategy = NearbyTransportStrategy.STAR
     }
 
     private fun requestConnection(
@@ -391,6 +420,7 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
         connectionsClient.stopAllEndpoints()
         clearTransientState()
         activeRole = NearbyRole.NONE
+        activeStrategy = NearbyTransportStrategy.STAR
     }
 
     private fun deniedPermissions(): List<String> {
@@ -417,12 +447,26 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
         return permissions.distinct()
     }
 
-    private fun normalizeForRole(role: NearbyRole) {
+    private fun normalizeForRole(role: NearbyRole, strategy: NearbyTransportStrategy) {
         connectionsClient.stopAdvertising()
         connectionsClient.stopDiscovery()
         connectionsClient.stopAllEndpoints()
         clearTransientState()
         activeRole = role
+        activeStrategy = strategy
+    }
+
+    private fun isPointToPointHostBusy(endpointId: String): Boolean {
+        if (activeRole != NearbyRole.HOST) {
+            return false
+        }
+        if (activeStrategy != NearbyTransportStrategy.POINT_TO_POINT) {
+            return false
+        }
+        if (pendingEndpointId != null && pendingEndpointId != endpointId) {
+            return true
+        }
+        return connectedEndpointIds.any { connectedId -> connectedId != endpointId }
     }
 
     private fun clearTransientState() {
@@ -477,8 +521,14 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
             val clientBusy = activeRole == NearbyRole.CLIENT &&
                 connectedEndpointIds.isNotEmpty() &&
                 !connectedEndpointIds.contains(endpointId)
+            val pointToPointHostBusy = isPointToPointHostBusy(endpointId)
 
-            if (hasPendingDifferent || clientBusy) {
+            if (hasPendingDifferent || clientBusy || pointToPointHostBusy) {
+                val statusMessage = if (pointToPointHostBusy) {
+                    "Connection rejected: point-to-point host already has a connected peer."
+                } else {
+                    "Connection rejected: competing connection state."
+                }
                 connectionsClient.rejectConnection(endpointId)
                 emitEvent(
                     mapOf(
@@ -487,9 +537,10 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
                         "endpointName" to endpointNamesById[endpointId],
                         "connected" to false,
                         "statusCode" to ConnectionsStatusCodes.STATUS_ENDPOINT_IO_ERROR,
-                        "statusMessage" to "Connection rejected: competing connection state.",
+                        "statusMessage" to statusMessage,
                     ),
                 )
+                emitError(statusMessage)
                 return
             }
 

@@ -6,8 +6,6 @@ enum MotionCameraFacing { rear, front }
 
 enum HsRefinementLifecycle { idle, running, done, error }
 
-enum HsScanDirection { forward, backward }
-
 class HsTriggerRefinementRequest {
   const HsTriggerRefinementRequest({
     required this.triggerSensorNanos,
@@ -81,71 +79,6 @@ class HsTriggerRefinementResult {
       rawScore: (json['rawScore'] as num?)?.toDouble(),
       baseline: (json['baseline'] as num?)?.toDouble(),
       effectiveScore: (json['effectiveScore'] as num?)?.toDouble(),
-    );
-  }
-}
-
-class HsOfflineRecordingAnalysisResult {
-  const HsOfflineRecordingAnalysisResult({
-    required this.runId,
-    required this.triggerType,
-    required this.splitIndex,
-    required this.scanDirection,
-    required this.resolved,
-    this.localSensorNanos,
-    this.rawScore,
-    this.baseline,
-    this.effectiveScore,
-    this.diagnostics,
-  });
-
-  final String runId;
-  final MotionTriggerType triggerType;
-  final int splitIndex;
-  final HsScanDirection scanDirection;
-  final bool resolved;
-  final int? localSensorNanos;
-  final double? rawScore;
-  final double? baseline;
-  final double? effectiveScore;
-  final String? diagnostics;
-
-  static HsOfflineRecordingAnalysisResult? fromJson(Map<String, dynamic> json) {
-    final triggerTypeName = json['triggerType']?.toString();
-    final triggerType = switch (triggerTypeName) {
-      'start' => MotionTriggerType.start,
-      'stop' => MotionTriggerType.stop,
-      'split' => MotionTriggerType.split,
-      _ => null,
-    };
-    final runId = json['runId']?.toString();
-    final splitIndex = (json['splitIndex'] as num?)?.toInt();
-    final resolved = json['resolved'];
-    final scanDirectionName = json['scanDirection']?.toString();
-    final scanDirection = switch (scanDirectionName) {
-      'backward' => HsScanDirection.backward,
-      'forward' => HsScanDirection.forward,
-      _ => null,
-    };
-    if (runId == null ||
-        runId.isEmpty ||
-        triggerType == null ||
-        splitIndex == null ||
-        resolved is! bool ||
-        scanDirection == null) {
-      return null;
-    }
-    return HsOfflineRecordingAnalysisResult(
-      runId: runId,
-      triggerType: triggerType,
-      splitIndex: splitIndex,
-      scanDirection: scanDirection,
-      resolved: resolved,
-      localSensorNanos: (json['localSensorNanos'] as num?)?.toInt(),
-      rawScore: (json['rawScore'] as num?)?.toDouble(),
-      baseline: (json['baseline'] as num?)?.toDouble(),
-      effectiveScore: (json['effectiveScore'] as num?)?.toDouble(),
-      diagnostics: json['diagnostics']?.toString(),
     );
   }
 }
