@@ -606,8 +606,9 @@ class RaceSessionController extends ChangeNotifier {
     }
     if (isHost) {
       if (localRole == SessionDeviceRole.split &&
-          _hostSplitSensorNanosByIndex.isNotEmpty)
+          _hostSplitSensorNanosByIndex.isNotEmpty) {
         return;
+      }
       _recordLocalProvisionalTrigger(
         role: localRole,
         triggerSensorNanos: trigger.triggerSensorNanos,
@@ -623,8 +624,9 @@ class RaceSessionController extends ChangeNotifier {
         _connectedEndpointIds.isNotEmpty &&
         localRole != SessionDeviceRole.unassigned) {
       if (localRole == SessionDeviceRole.split &&
-          _timeline.splitElapsedNanos.isNotEmpty)
+          _timeline.splitElapsedNanos.isNotEmpty) {
         return;
+      }
       _recordLocalProvisionalTrigger(
         role: localRole,
         triggerSensorNanos: trigger.triggerSensorNanos,
