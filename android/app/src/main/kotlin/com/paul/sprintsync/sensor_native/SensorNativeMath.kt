@@ -318,19 +318,6 @@ object HsPostRaceRefiner {
     }
 }
 
-object HsOfflineMetricSelector {
-    fun selectFirstThresholdCrossing(
-        metrics: List<HsOfflineAnalysisMetric>,
-        threshold: Double,
-        direction: HsScanDirection,
-    ): HsOfflineAnalysisMetric? {
-        return when (direction) {
-            HsScanDirection.FORWARD -> metrics.firstOrNull { it.effectiveScore >= threshold }
-            HsScanDirection.BACKWARD -> metrics.asReversed().firstOrNull { it.effectiveScore >= threshold }
-        }
-    }
-}
-
 data class NativeFpsObservation(
     val observedFps: Double?,
     val shouldDowngradeToNormal: Boolean,
@@ -404,31 +391,5 @@ class SensorOffsetSmoother {
             ((current!! * 3L) + sample) / 4L
         }
         return current ?: sample
-    }
-}
-
-object SensorTimeMath {
-    fun sensorToElapsedNanos(sensorNanos: Long, sensorMinusElapsedNanos: Long): Long {
-        return sensorNanos - sensorMinusElapsedNanos
-    }
-
-    fun elapsedToSensorNanos(elapsedNanos: Long, sensorMinusElapsedNanos: Long): Long {
-        return elapsedNanos + sensorMinusElapsedNanos
-    }
-
-    fun sensorToUtcNanos(
-        sensorNanos: Long,
-        sensorMinusElapsedNanos: Long,
-        gpsUtcOffsetNanos: Long,
-    ): Long {
-        return sensorToElapsedNanos(sensorNanos, sensorMinusElapsedNanos) + gpsUtcOffsetNanos
-    }
-
-    fun utcToSensorNanos(
-        utcNanos: Long,
-        sensorMinusElapsedNanos: Long,
-        gpsUtcOffsetNanos: Long,
-    ): Long {
-        return elapsedToSensorNanos(utcNanos - gpsUtcOffsetNanos, sensorMinusElapsedNanos)
     }
 }

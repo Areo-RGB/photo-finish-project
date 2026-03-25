@@ -13,11 +13,6 @@ enum class NativeCameraFpsMode(val wireName: String) {
     HS120("hs120"),
 }
 
-enum class HsScanDirection(val wireName: String) {
-    FORWARD("forward"),
-    BACKWARD("backward"),
-}
-
 data class NativeMonitoringConfig(
     val threshold: Double,
     val roiCenterX: Double,
@@ -169,33 +164,6 @@ data class HsTriggerRefinementResult(
     val effectiveScore: Double? = null,
 )
 
-data class HsRecordedVideoArtifact(
-    val runId: String,
-    val outputPath: String,
-    val encodedPtsUs: List<Long>,
-    val captureSensorNanos: List<Long>,
-)
-
-data class HsOfflineAnalysisMetric(
-    val sensorNanos: Long,
-    val rawScore: Double,
-    val baseline: Double,
-    val effectiveScore: Double,
-)
-
-data class HsOfflineAnalysisResult(
-    val runId: String,
-    val triggerType: String,
-    val splitIndex: Int,
-    val scanDirection: HsScanDirection,
-    val resolved: Boolean,
-    val localSensorNanos: Long?,
-    val rawScore: Double? = null,
-    val baseline: Double? = null,
-    val effectiveScore: Double? = null,
-    val diagnostics: String? = null,
-)
-
 private fun clampDouble(value: Double, minValue: Double, maxValue: Double): Double {
     return min(max(value, minValue), maxValue)
 }
@@ -206,8 +174,4 @@ private fun clampInt(value: Int, minValue: Int, maxValue: Int): Int {
 
 internal fun nativeCameraFacingFromWire(value: String?): NativeCameraFacing? {
     return NativeCameraFacing.values().firstOrNull { it.wireName == value }
-}
-
-internal fun hsScanDirectionFromWire(value: String?): HsScanDirection? {
-    return HsScanDirection.values().firstOrNull { it.wireName == value }
 }

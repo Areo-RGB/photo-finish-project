@@ -493,38 +493,6 @@ class SensorNativeController(
         )
     }
 
-    private fun startHsBackend(
-        onStarted: () -> Unit,
-        onError: (String) -> Unit,
-    ) {
-        cameraSession.stop(cameraProvider)
-        cameraProvider = null
-        cancelPreviewRebindRetries()
-        val resultHandled = AtomicBoolean(false)
-        hsSession.start(
-            preferredFacing = config.cameraFacing,
-            onFrameConsumed = ::onHsFrameConsumed,
-            onStarted = { fpsUpper ->
-                mainHandler.post {
-                    if (!resultHandled.compareAndSet(false, true)) {
-                        return@post
-                    }
-                    activeCameraFpsMode = NativeCameraFpsMode.HS120
-                    targetFpsUpper = fpsUpper
-                    onStarted()
-                }
-            },
-            onStartError = { message ->
-                mainHandler.post {
-                    if (!resultHandled.compareAndSet(false, true)) {
-                        return@post
-                    }
-                    onError(message)
-                }
-            },
-        )
-    }
-
     private fun stopNativeMonitoringInternal() {
         cancelPreviewRebindRetries()
         monitoring = false

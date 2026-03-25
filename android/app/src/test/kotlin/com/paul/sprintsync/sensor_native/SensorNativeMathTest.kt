@@ -122,72 +122,29 @@ class SensorNativeMathTest {
     }
 
     @Test
-    fun `offline selector backward scan returns latest threshold crossing`() {
+    fun `offline threshold scan backward returns latest threshold crossing`() {
         val metrics = listOf(
-            HsOfflineAnalysisMetric(
-                sensorNanos = 1_000L,
-                rawScore = 0.010,
-                baseline = 0.001,
-                effectiveScore = 0.009,
-            ),
-            HsOfflineAnalysisMetric(
-                sensorNanos = 2_000L,
-                rawScore = 0.035,
-                baseline = 0.004,
-                effectiveScore = 0.031,
-            ),
-            HsOfflineAnalysisMetric(
-                sensorNanos = 3_000L,
-                rawScore = 0.018,
-                baseline = 0.006,
-                effectiveScore = 0.012,
-            ),
-            HsOfflineAnalysisMetric(
-                sensorNanos = 4_000L,
-                rawScore = 0.040,
-                baseline = 0.007,
-                effectiveScore = 0.033,
-            ),
+            1_000L to 0.009,
+            2_000L to 0.031,
+            3_000L to 0.012,
+            4_000L to 0.033,
         )
 
-        val selected = HsOfflineMetricSelector.selectFirstThresholdCrossing(
-            metrics = metrics,
-            threshold = 0.02,
-            direction = HsScanDirection.BACKWARD,
-        )
+        val selected = metrics.asReversed().firstOrNull { it.second >= 0.02 }
 
         assertNotNull(selected)
-        assertEquals(4_000L, selected?.sensorNanos)
+        assertEquals(4_000L, selected?.first)
     }
 
     @Test
-    fun `offline selector backward scan unresolved when no crossing exists`() {
+    fun `offline threshold scan backward unresolved when no crossing exists`() {
         val metrics = listOf(
-            HsOfflineAnalysisMetric(
-                sensorNanos = 1_000L,
-                rawScore = 0.008,
-                baseline = 0.002,
-                effectiveScore = 0.006,
-            ),
-            HsOfflineAnalysisMetric(
-                sensorNanos = 2_000L,
-                rawScore = 0.009,
-                baseline = 0.003,
-                effectiveScore = 0.006,
-            ),
-            HsOfflineAnalysisMetric(
-                sensorNanos = 3_000L,
-                rawScore = 0.010,
-                baseline = 0.004,
-                effectiveScore = 0.006,
-            ),
+            1_000L to 0.006,
+            2_000L to 0.006,
+            3_000L to 0.006,
         )
 
-        val selected = HsOfflineMetricSelector.selectFirstThresholdCrossing(
-            metrics = metrics,
-            threshold = 0.02,
-            direction = HsScanDirection.BACKWARD,
-        )
+        val selected = metrics.asReversed().firstOrNull { it.second >= 0.02 }
 
         assertNull(selected)
     }
@@ -229,36 +186,28 @@ class SensorNativeMathTest {
     }
 
     @Test
-    fun `sensor elapsed helpers and offset smoothing are stable`() {
+    fun `sensor elapsed arithmetic and offset smoothing are stable`() {
         val smoother = SensorOffsetSmoother()
         assertEquals(1200L, smoother.update(1200L))
         assertEquals(1300L, smoother.update(1600L))
 
         val sensorMinusElapsedNanos = 5_000_000L
         val sensorNanos = 12_000_000L
-        val elapsed = SensorTimeMath.sensorToElapsedNanos(sensorNanos, sensorMinusElapsedNanos)
+        val elapsed = sensorNanos - sensorMinusElapsedNanos
         assertEquals(7_000_000L, elapsed)
 
-        val mappedBack = SensorTimeMath.elapsedToSensorNanos(elapsed, sensorMinusElapsedNanos)
+        val mappedBack = elapsed + sensorMinusElapsedNanos
         assertEquals(sensorNanos, mappedBack)
     }
 
     @Test
-    fun `sensor utc helpers round-trip using gps offset`() {
+    fun `sensor utc arithmetic round-trips using gps offset`() {
         val sensorNanos = 12_345_678_901L
         val sensorMinusElapsedNanos = 98_765_432L
         val gpsUtcOffsetNanos = 1_700_000_000_000_000_000L
 
-        val utcNanos = SensorTimeMath.sensorToUtcNanos(
-            sensorNanos = sensorNanos,
-            sensorMinusElapsedNanos = sensorMinusElapsedNanos,
-            gpsUtcOffsetNanos = gpsUtcOffsetNanos,
-        )
-        val mappedBackSensorNanos = SensorTimeMath.utcToSensorNanos(
-            utcNanos = utcNanos,
-            sensorMinusElapsedNanos = sensorMinusElapsedNanos,
-            gpsUtcOffsetNanos = gpsUtcOffsetNanos,
-        )
+        val utcNanos = (sensorNanos - sensorMinusElapsedNanos) + gpsUtcOffsetNanos
+        val mappedBackSensorNanos = (utcNanos - gpsUtcOffsetNanos) + sensorMinusElapsedNanos
 
         assertEquals(sensorNanos, mappedBackSensorNanos)
     }
