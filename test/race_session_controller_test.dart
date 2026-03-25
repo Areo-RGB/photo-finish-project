@@ -1459,6 +1459,294 @@ void main() {
     fixture.dispose();
   });
 
+  test('client uses CHIRP lock when GPS is unavailable', () async {
+    final fixture = _ControllerFixture.create();
+    await fixture.controller.joinLobby();
+    fixture.bridge.emitEvent(<String, dynamic>{
+      'type': 'connection_result',
+      'endpointId': 'host-1',
+      'connected': true,
+    });
+    await _flushEvents();
+    fixture.bridge.sentPayloads.clear();
+
+    fixture.nativeBridge.emitEvent(<String, dynamic>{
+      'type': 'native_state',
+      'hostSensorMinusElapsedNanos': 700000000,
+    });
+    fixture.nativeBridge.emitEvent(<String, dynamic>{
+      'type': 'native_frame_stats',
+      'frameSensorNanos': 2000000000,
+      'rawScore': 0.01,
+      'baseline': 0.01,
+      'effectiveScore': 0.0,
+    });
+    await _flushEvents();
+
+    fixture.bridge.emitEvent(<String, dynamic>{
+      'type': 'payload_received',
+      'endpointId': 'host-1',
+      'message': SessionSnapshotMessage(
+        stage: SessionStage.monitoring,
+        monitoringActive: true,
+        devices: const <SessionDevice>[
+          SessionDevice(
+            id: 'local-device',
+            name: 'Client',
+            role: SessionDeviceRole.start,
+            isLocal: false,
+          ),
+          SessionDevice(
+            id: 'host-1',
+            name: 'Host',
+            role: SessionDeviceRole.stop,
+            isLocal: false,
+          ),
+        ],
+        timeline: SessionRaceTimeline.idle(),
+        hostSensorMinusElapsedNanos: 120000000,
+        selfDeviceId: 'local-device',
+      ).toJsonString(),
+    });
+    await _flushEvents();
+
+    fixture.bridge.emitEvent(<String, dynamic>{
+      'type': 'payload_received',
+      'endpointId': 'host-1',
+      'message': const SessionChirpSyncResultMessage(
+        calibrationId: 'chirp_test_1',
+        accepted: true,
+        hostMinusClientElapsedNanos: 250000000,
+        jitterNanos: 900000,
+      ).toJsonString(),
+    });
+    await _flushEvents();
+
+    expect(fixture.controller.monitoringSyncModeLabel, 'CHIRP');
+
+    await fixture.controller.onLocalMotionPulse(
+      const MotionTriggerEvent(
+        triggerSensorNanos: 2000000000,
+        score: 0.1,
+        type: MotionTriggerType.start,
+        splitIndex: 0,
+      ),
+    );
+
+    final triggerRequests = fixture.bridge.sentPayloads
+        .map(
+          (payload) =>
+              SessionTriggerRequestMessage.tryParse(payload.messageJson),
+        )
+        .whereType<SessionTriggerRequestMessage>()
+        .toList();
+    expect(triggerRequests, isNotEmpty);
+    expect(triggerRequests.last.mappedHostSensorNanos, 1670000000);
+    fixture.dispose();
+  });
+
+  test('ending CHIRP lock falls back to NTP when available', () async {
+    int nowElapsedNanos = 1200000000;
+    final fixture = _ControllerFixture.create(
+      nowElapsedNanos: () => nowElapsedNanos,
+    );
+    await fixture.controller.joinLobby();
+    fixture.bridge.emitEvent(<String, dynamic>{
+      'type': 'connection_result',
+      'endpointId': 'host-1',
+      'connected': true,
+    });
+    await _flushEvents();
+
+    fixture.nativeBridge.emitEvent(<String, dynamic>{
+      'type': 'native_state',
+      'hostSensorMinusElapsedNanos': 700000000,
+    });
+    fixture.nativeBridge.emitEvent(<String, dynamic>{
+      'type': 'native_frame_stats',
+      'frameSensorNanos': 2000000000,
+      'rawScore': 0.01,
+      'baseline': 0.01,
+      'effectiveScore': 0.0,
+    });
+    await _flushEvents();
+
+    fixture.bridge.emitEvent(<String, dynamic>{
+      'type': 'payload_received',
+      'endpointId': 'host-1',
+      'message': SessionSnapshotMessage(
+        stage: SessionStage.monitoring,
+        monitoringActive: true,
+        devices: const <SessionDevice>[
+          SessionDevice(
+            id: 'local-device',
+            name: 'Client',
+            role: SessionDeviceRole.start,
+            isLocal: false,
+          ),
+          SessionDevice(
+            id: 'host-1',
+            name: 'Host',
+            role: SessionDeviceRole.stop,
+            isLocal: false,
+          ),
+        ],
+        timeline: SessionRaceTimeline.idle(),
+        hostSensorMinusElapsedNanos: 120000000,
+        selfDeviceId: 'local-device',
+      ).toJsonString(),
+    });
+    await _flushEvents();
+
+    final syncRequests = fixture.bridge.sentPayloads
+        .map(
+          (payload) =>
+              SessionClockSyncRequestMessage.tryParse(payload.messageJson),
+        )
+        .whereType<SessionClockSyncRequestMessage>()
+        .toList();
+    for (final syncRequest in syncRequests) {
+      nowElapsedNanos += 1000000;
+      fixture.bridge.emitEvent(<String, dynamic>{
+        'type': 'payload_received',
+        'endpointId': 'host-1',
+        'message': SessionClockSyncResponseMessage(
+          clientSendElapsedNanos: syncRequest.clientSendElapsedNanos,
+          hostReceiveElapsedNanos:
+              syncRequest.clientSendElapsedNanos + 50000000,
+          hostSendElapsedNanos: syncRequest.clientSendElapsedNanos + 50005000,
+        ).toJsonString(),
+      });
+    }
+    await _flushEvents();
+
+    fixture.bridge.emitEvent(<String, dynamic>{
+      'type': 'payload_received',
+      'endpointId': 'host-1',
+      'message': const SessionChirpSyncResultMessage(
+        calibrationId: 'chirp_test_2',
+        accepted: true,
+        hostMinusClientElapsedNanos: 250000000,
+        jitterNanos: 800000,
+      ).toJsonString(),
+    });
+    await _flushEvents();
+
+    expect(fixture.controller.monitoringSyncModeLabel, 'CHIRP');
+    await fixture.controller.endChirpSyncCalibration();
+    await _flushEvents();
+    expect(fixture.controller.monitoringSyncModeLabel, 'NTP');
+    fixture.dispose();
+  });
+
+  test('CHIRP offset is preferred over NTP for trigger mapping', () async {
+    int nowElapsedNanos = 1200000000;
+    final fixture = _ControllerFixture.create(
+      nowElapsedNanos: () => nowElapsedNanos,
+    );
+    await fixture.controller.joinLobby();
+    fixture.bridge.emitEvent(<String, dynamic>{
+      'type': 'connection_result',
+      'endpointId': 'host-1',
+      'connected': true,
+    });
+    await _flushEvents();
+    fixture.bridge.sentPayloads.clear();
+
+    fixture.nativeBridge.emitEvent(<String, dynamic>{
+      'type': 'native_state',
+      'hostSensorMinusElapsedNanos': 700000000,
+    });
+    fixture.nativeBridge.emitEvent(<String, dynamic>{
+      'type': 'native_frame_stats',
+      'frameSensorNanos': 2000000000,
+      'rawScore': 0.01,
+      'baseline': 0.01,
+      'effectiveScore': 0.0,
+    });
+    await _flushEvents();
+
+    fixture.bridge.emitEvent(<String, dynamic>{
+      'type': 'payload_received',
+      'endpointId': 'host-1',
+      'message': SessionSnapshotMessage(
+        stage: SessionStage.monitoring,
+        monitoringActive: true,
+        devices: const <SessionDevice>[
+          SessionDevice(
+            id: 'local-device',
+            name: 'Client',
+            role: SessionDeviceRole.start,
+            isLocal: false,
+          ),
+          SessionDevice(
+            id: 'host-1',
+            name: 'Host',
+            role: SessionDeviceRole.stop,
+            isLocal: false,
+          ),
+        ],
+        timeline: SessionRaceTimeline.idle(),
+        hostSensorMinusElapsedNanos: 120000000,
+        selfDeviceId: 'local-device',
+      ).toJsonString(),
+    });
+    await _flushEvents();
+
+    final syncRequest = fixture.bridge.sentPayloads
+        .map(
+          (payload) =>
+              SessionClockSyncRequestMessage.tryParse(payload.messageJson),
+        )
+        .whereType<SessionClockSyncRequestMessage>()
+        .first;
+    nowElapsedNanos = syncRequest.clientSendElapsedNanos + 1000000;
+    fixture.bridge.emitEvent(<String, dynamic>{
+      'type': 'payload_received',
+      'endpointId': 'host-1',
+      'message': SessionClockSyncResponseMessage(
+        clientSendElapsedNanos: syncRequest.clientSendElapsedNanos,
+        hostReceiveElapsedNanos: syncRequest.clientSendElapsedNanos + 50000000,
+        hostSendElapsedNanos: syncRequest.clientSendElapsedNanos + 50005000,
+      ).toJsonString(),
+    });
+    await _flushEvents();
+
+    fixture.bridge.emitEvent(<String, dynamic>{
+      'type': 'payload_received',
+      'endpointId': 'host-1',
+      'message': const SessionChirpSyncResultMessage(
+        calibrationId: 'chirp_test_3',
+        accepted: true,
+        hostMinusClientElapsedNanos: 250000000,
+        jitterNanos: 700000,
+      ).toJsonString(),
+    });
+    await _flushEvents();
+    fixture.bridge.sentPayloads.clear();
+
+    await fixture.controller.onLocalMotionPulse(
+      const MotionTriggerEvent(
+        triggerSensorNanos: 2000000000,
+        score: 0.1,
+        type: MotionTriggerType.start,
+        splitIndex: 0,
+      ),
+    );
+
+    final triggerRequests = fixture.bridge.sentPayloads
+        .map(
+          (payload) =>
+              SessionTriggerRequestMessage.tryParse(payload.messageJson),
+        )
+        .whereType<SessionTriggerRequestMessage>()
+        .toList();
+    expect(triggerRequests, isNotEmpty);
+    expect(fixture.controller.monitoringSyncModeLabel, 'CHIRP');
+    expect(triggerRequests.last.mappedHostSensorNanos, 1670000000);
+    fixture.dispose();
+  });
+
   test('host rebroadcasts snapshot when host GPS offset changes', () async {
     final fixture = _ControllerFixture.create();
     await fixture.controller.createLobby();
@@ -2948,6 +3236,41 @@ class _FakeNearbyBridge extends NearbyBridge {
     required bool enabled,
     required bool requireSensorDomainClock,
   }) async {}
+
+  @override
+  Future<Map<String, dynamic>> getChirpCapabilities() async {
+    return <String, dynamic>{
+      'supported': true,
+      'supportsMicNearUltrasound': false,
+      'supportsSpeakerNearUltrasound': false,
+      'selectedProfile': 'fallback',
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> startChirpSync({
+    required String calibrationId,
+    required String role,
+    required String profile,
+    required int sampleCount,
+    int? remoteSendElapsedNanos,
+  }) async {
+    return <String, dynamic>{
+      'calibrationId': calibrationId,
+      'accepted': true,
+      'hostMinusClientElapsedNanos': 120000000,
+      'jitterNanos': 800000,
+      'completedAtElapsedNanos': 2000000000,
+      'sampleCount': sampleCount,
+      'profile': profile,
+    };
+  }
+
+  @override
+  Future<void> stopChirpSync() async {}
+
+  @override
+  Future<void> clearChirpSync() async {}
 
   void dispose() {
     _eventsController.close();

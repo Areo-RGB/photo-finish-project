@@ -7,6 +7,7 @@ import android.os.Handler
 import android.os.Looper
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.paul.sprintsync.chirp_sync.AcousticChirpSyncEngine
 import com.paul.sprintsync.sensor_native.SensorNativeController
 import com.paul.sprintsync.sensor_native.SensorNativePreviewViewFactory
 import com.google.android.gms.nearby.Nearby
@@ -68,6 +69,7 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
     private val mainHandler = Handler(Looper.getMainLooper())
     private lateinit var connectionsClient: ConnectionsClient
     private lateinit var sensorNativeController: SensorNativeController
+    private lateinit var acousticChirpSyncEngine: AcousticChirpSyncEngine
 
     private var eventSink: EventChannel.EventSink? = null
     private var pendingPermissionResult: MethodChannel.Result? = null
@@ -83,6 +85,7 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
         super.configureFlutterEngine(flutterEngine)
         connectionsClient = Nearby.getConnectionsClient(this)
         sensorNativeController = SensorNativeController(this)
+        acousticChirpSyncEngine = AcousticChirpSyncEngine(this)
         sensorNativeController.configure(flutterEngine.dartExecutor.binaryMessenger)
         flutterEngine
             .platformViewsController
@@ -182,6 +185,16 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
             }
             "configureNativeClockSyncHost" -> {
                 configureNativeClockSyncHost(call, result)
+            }
+            "getChirpCapabilities" -> getChirpCapabilities(result)
+            "startChirpSync" -> startChirpSync(call, result)
+            "stopChirpSync" -> {
+                acousticChirpSyncEngine.stop()
+                result.success(null)
+            }
+            "clearChirpSync" -> {
+                acousticChirpSyncEngine.clear()
+                result.success(null)
             }
 
             "disconnect" -> {
@@ -417,6 +430,51 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
         result.success(null)
     }
 
+    private fun getChirpCapabilities(result: MethodChannel.Result) {
+        result.success(acousticChirpSyncEngine.getCapabilities().toMap())
+    }
+
+    private fun startChirpSync(call: MethodCall, result: MethodChannel.Result) {
+        val calibrationId = stringArg(call, "calibrationId", result) ?: return
+        val role = call.argument<String>("role")?.trim().orEmpty().ifEmpty { "initiator" }
+        val profile = call.argument<String>("profile")?.trim().orEmpty().ifEmpty { "fallback" }
+        val sampleCount = (call.argument<Number>("sampleCount") ?: 0).toInt().coerceAtLeast(3)
+        val remoteSendElapsedNanos = call.argument<Number>("remoteSendElapsedNanos")?.toLong()
+
+        Thread {
+            try {
+                val response = acousticChirpSyncEngine.startCalibration(
+                    calibrationId = calibrationId,
+                    role = role,
+                    profile = profile,
+                    sampleCount = sampleCount,
+                    remoteSendElapsedNanos = remoteSendElapsedNanos,
+                ) { state ->
+                    emitEvent(
+                        mapOf(
+                            "type" to "chirp_sync_progress",
+                            "calibrationId" to calibrationId,
+                            "state" to state,
+                        ),
+                    )
+                }
+                mainHandler.post { result.success(response.toMap()) }
+            } catch (error: Exception) {
+                val message = error.localizedMessage ?: "unknown"
+                emitEvent(
+                    mapOf(
+                        "type" to "chirp_sync_error",
+                        "calibrationId" to calibrationId,
+                        "message" to message,
+                    ),
+                )
+                mainHandler.post {
+                    result.error("chirp_sync_failed", message, null)
+                }
+            }
+        }.start()
+    }
+
     private fun disconnect(endpointId: String) {
         connectionsClient.disconnectFromEndpoint(endpointId)
         clearEndpointState(endpointId)
@@ -458,6 +516,7 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
             permissions += Manifest.permission.BLUETOOTH_CONNECT
             permissions += Manifest.permission.BLUETOOTH_SCAN
         }
+        permissions += Manifest.permission.RECORD_AUDIO
         return permissions.distinct()
     }
 
@@ -490,6 +549,9 @@ class MainActivity : FlutterActivity(), ActivityCompat.OnRequestPermissionsResul
         endpointNamesById.clear()
         nativeClockSyncHostEnabled = false
         nativeClockSyncRequireSensorDomain = false
+        if (::acousticChirpSyncEngine.isInitialized) {
+            acousticChirpSyncEngine.clear()
+        }
     }
 
     private fun clearEndpointState(endpointId: String) {

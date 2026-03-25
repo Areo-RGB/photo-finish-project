@@ -17,6 +17,9 @@ class RaceSessionController extends ChangeNotifier {
   static const int _gpsOffsetStaleAfterNanos = 10000000000;
   static const int _gpsSnapshotRebroadcastMinIntervalNanos = 1000000000;
   static const int _sensorElapsedProjectionMaxAgeNanos = 3000000000;
+  static const int _chirpSyncSampleCount = 9;
+  static const int _chirpSyncResultTimeoutNanos = 8000000000;
+  static const int _chirpMaxAcceptedJitterNanos = 2000000;
   static final Stopwatch _elapsedClock = Stopwatch()..start();
 
   static int _defaultElapsedNanos() {
@@ -76,6 +79,14 @@ class RaceSessionController extends ChangeNotifier {
   int? _hostMinusClientElapsedNanos;
   int? _hostClockRoundTripNanos;
   int? _lastClockSyncElapsedNanos;
+  int? _chirpHostMinusClientElapsedNanos;
+  int? _chirpQualityNanos;
+  int? _chirpLastCalibratedElapsedNanos;
+  String? _activeChirpCalibrationId;
+  bool _chirpLockActive = false;
+  bool _chirpSyncInProgress = false;
+  String _chirpSyncStatusText = 'Not calibrated';
+  String _chirpProfile = 'fallback';
   int? _hostSensorMinusElapsedNanos;
   int? _hostGpsUtcOffsetNanos;
   int? _hostGpsFixAgeNanos;
@@ -120,6 +131,11 @@ class RaceSessionController extends ChangeNotifier {
   bool get monitoringActive => _monitoringActive;
   String? get errorText => _errorText;
   String? get refinementStatusText => _refinementStatusText;
+  bool get chirpSyncInProgress => _chirpSyncInProgress;
+  bool get chirpLockActive => _isChirpClockLockValid();
+  String get chirpSyncStatusText => _chirpSyncStatusText;
+  int? get chirpQualityUs =>
+      _chirpQualityNanos == null ? null : (_chirpQualityNanos! / 1000).round();
   List<SessionRefinementImpact> get refinementImpacts {
     final liveStartSensorNanos = _hostLiveStartSensorNanos;
     final correctedStartSensorNanos = _hostStartSensorNanos;
@@ -212,6 +228,9 @@ class RaceSessionController extends ChangeNotifier {
     }
     if (_hasFreshGpsClockLock()) {
       return 'GPS';
+    }
+    if (_isChirpClockLockValid()) {
+      return 'CHIRP';
     }
     if (_isNtpClockLockValid()) {
       return 'NTP';
@@ -375,6 +394,81 @@ class RaceSessionController extends ChangeNotifier {
       );
       notifyListeners();
     }
+  }
+
+  Future<void> startChirpSyncCalibration() async {
+    if (!isClient ||
+        _connectedEndpointIds.isEmpty ||
+        _chirpSyncInProgress ||
+        !(_stage == SessionStage.setup || _stage == SessionStage.lobby)) {
+      return;
+    }
+    final endpointId = _connectedEndpointIds.first;
+    final clientSendElapsedNanos = _nowClockSyncElapsedNanos(
+      requireSensorDomainIfMonitoring: false,
+    );
+    if (clientSendElapsedNanos == null) {
+      _chirpSyncStatusText = 'Failed (clock unavailable)';
+      notifyListeners();
+      return;
+    }
+    final calibrationId = 'chirp_${DateTime.now().microsecondsSinceEpoch}';
+    _chirpSyncInProgress = true;
+    _activeChirpCalibrationId = calibrationId;
+    _chirpSyncStatusText = 'Calibrating';
+    _errorText = null;
+    notifyListeners();
+    try {
+      final capabilities = await _nearbyBridge.getChirpCapabilities();
+      _chirpProfile = _resolveChirpProfile(capabilities);
+      await _nearbyBridge.startChirpSync(
+        calibrationId: calibrationId,
+        role: 'initiator',
+        profile: _chirpProfile,
+        sampleCount: _chirpSyncSampleCount,
+      );
+      await _nearbyBridge.sendBytes(
+        endpointId: endpointId,
+        messageJson: SessionChirpSyncStartMessage(
+          calibrationId: calibrationId,
+          profile: _chirpProfile,
+          sampleCount: _chirpSyncSampleCount,
+          clientSendElapsedNanos: clientSendElapsedNanos,
+        ).toJsonString(),
+      );
+      _scheduleChirpSyncTimeout(calibrationId);
+    } catch (error) {
+      _chirpSyncInProgress = false;
+      _activeChirpCalibrationId = null;
+      _chirpSyncStatusText = 'Failed ($error)';
+      notifyListeners();
+    }
+  }
+
+  Future<void> endChirpSyncCalibration() async {
+    _clearChirpLock(reason: 'Not calibrated');
+    try {
+      await _nearbyBridge.clearChirpSync();
+    } catch (_) {
+      // Best effort only.
+    }
+    if (_connectedEndpointIds.isNotEmpty) {
+      try {
+        await _nearbyBridge.sendBytes(
+          endpointId: _connectedEndpointIds.first,
+          messageJson: const SessionChirpSyncClearMessage().toJsonString(),
+        );
+      } catch (_) {
+        // Best effort only.
+      }
+    }
+    if (isClient &&
+        _monitoringActive &&
+        _connectedEndpointIds.isNotEmpty &&
+        _shouldRunNtpSync()) {
+      unawaited(_requestClockSync());
+    }
+    notifyListeners();
   }
 
   void goToLobby() {
@@ -642,6 +736,7 @@ class RaceSessionController extends ChangeNotifier {
       _connectedEndpointIds.remove(endpointId);
       _devices.remove(endpointId);
       if (isClient && _connectedEndpointIds.isEmpty) {
+        _clearChirpLock(reason: 'Not calibrated');
         unawaited(_handleClientDisconnectedFromHost());
         return;
       }
@@ -688,6 +783,7 @@ class RaceSessionController extends ChangeNotifier {
         _devices.remove(connection.endpointId);
         if (_connectedEndpointIds.isEmpty) {
           _clearClockSyncLock();
+          _clearChirpLock(reason: 'Not calibrated');
           _hostSensorMinusElapsedNanos = null;
           _hostGpsUtcOffsetNanos = null;
           _hostGpsFixAgeNanos = null;
@@ -716,6 +812,22 @@ class RaceSessionController extends ChangeNotifier {
           _onPayload(message, endpointId: event['endpointId']?.toString()),
         );
       }
+      return;
+    }
+    if (type == 'chirp_sync_progress') {
+      final state = event['state']?.toString();
+      if (state != null && state.isNotEmpty) {
+        _chirpSyncStatusText = state == 'running' ? 'Calibrating' : state;
+        notifyListeners();
+      }
+      return;
+    }
+    if (type == 'chirp_sync_error') {
+      final message = event['message']?.toString();
+      _chirpSyncInProgress = false;
+      _activeChirpCalibrationId = null;
+      _chirpSyncStatusText = message == null ? 'Failed' : 'Failed ($message)';
+      notifyListeners();
       return;
     }
     if (type == 'error') {
@@ -854,6 +966,52 @@ class RaceSessionController extends ChangeNotifier {
         hostReceiveElapsedNanos: clockSyncResponse.hostReceiveElapsedNanos,
         clientReceiveElapsedNanos: clientReceiveElapsedNanos,
       );
+      return;
+    }
+    final chirpStart = SessionChirpSyncStartMessage.tryParse(raw);
+    if (chirpStart != null && endpointId != null) {
+      final responderResult = await _nearbyBridge.startChirpSync(
+        calibrationId: chirpStart.calibrationId,
+        role: 'responder',
+        profile: chirpStart.profile,
+        sampleCount: chirpStart.sampleCount,
+        remoteSendElapsedNanos: chirpStart.clientSendElapsedNanos,
+      );
+      await _nearbyBridge.sendBytes(
+        endpointId: endpointId,
+        messageJson: SessionChirpSyncResultMessage(
+          calibrationId: chirpStart.calibrationId,
+          accepted: responderResult['accepted'] == true,
+          hostMinusClientElapsedNanos: _readInt(
+            responderResult['hostMinusClientElapsedNanos'],
+          ),
+          jitterNanos: _readInt(responderResult['jitterNanos']),
+          reason: responderResult['reason']?.toString(),
+          completedAtElapsedNanos: _readInt(
+            responderResult['completedAtElapsedNanos'],
+          ),
+        ).toJsonString(),
+      );
+      return;
+    }
+    final chirpResult = SessionChirpSyncResultMessage.tryParse(raw);
+    if (chirpResult != null && isClient) {
+      if (_activeChirpCalibrationId != null &&
+          _activeChirpCalibrationId != chirpResult.calibrationId) {
+        return;
+      }
+      _applyChirpResult(chirpResult);
+      return;
+    }
+    final chirpClear = SessionChirpSyncClearMessage.tryParse(raw);
+    if (chirpClear != null) {
+      _clearChirpLock(reason: 'Not calibrated');
+      try {
+        await _nearbyBridge.clearChirpSync();
+      } catch (_) {
+        // Best effort only.
+      }
+      notifyListeners();
       return;
     }
     final triggerRefinement = SessionTriggerRefinementMessage.tryParse(raw);
@@ -1172,6 +1330,73 @@ class RaceSessionController extends ChangeNotifier {
     }
   }
 
+  String _resolveChirpProfile(Map<String, dynamic> capabilities) {
+    final supportsMicNearUltrasound =
+        capabilities['supportsMicNearUltrasound'] == true;
+    final supportsSpeakerNearUltrasound =
+        capabilities['supportsSpeakerNearUltrasound'] == true;
+    if (supportsMicNearUltrasound && supportsSpeakerNearUltrasound) {
+      return 'near_ultrasound';
+    }
+    return 'fallback';
+  }
+
+  void _scheduleChirpSyncTimeout(String calibrationId) {
+    unawaited(
+      Future<void>.delayed(
+        Duration(microseconds: _chirpSyncResultTimeoutNanos ~/ 1000),
+        () {
+          if (!_chirpSyncInProgress ||
+              _activeChirpCalibrationId != calibrationId) {
+            return;
+          }
+          _chirpSyncInProgress = false;
+          _activeChirpCalibrationId = null;
+          _chirpSyncStatusText = 'Failed (timeout)';
+          notifyListeners();
+        },
+      ),
+    );
+  }
+
+  void _applyChirpResult(SessionChirpSyncResultMessage result) {
+    _chirpSyncInProgress = false;
+    _activeChirpCalibrationId = null;
+    final offset = result.hostMinusClientElapsedNanos;
+    final jitterNanos = result.jitterNanos;
+    final withinQualityThreshold =
+        jitterNanos == null || jitterNanos <= _chirpMaxAcceptedJitterNanos;
+    if (result.accepted && offset != null && withinQualityThreshold) {
+      _chirpHostMinusClientElapsedNanos = offset;
+      _chirpQualityNanos = jitterNanos;
+      _chirpLockActive = true;
+      _chirpLastCalibratedElapsedNanos =
+          result.completedAtElapsedNanos ??
+          _nowClockSyncElapsedNanos(requireSensorDomainIfMonitoring: false);
+      final qualityUs = chirpQualityUs;
+      _chirpSyncStatusText = qualityUs == null
+          ? 'Calibrated'
+          : 'Calibrated ($qualityUs us)';
+      _errorText = null;
+      notifyListeners();
+      return;
+    }
+    _clearChirpLock(
+      reason: 'Failed (${result.reason ?? 'quality threshold not met'})',
+    );
+    notifyListeners();
+  }
+
+  void _clearChirpLock({String? reason}) {
+    _chirpHostMinusClientElapsedNanos = null;
+    _chirpQualityNanos = null;
+    _chirpLastCalibratedElapsedNanos = null;
+    _chirpLockActive = false;
+    _chirpSyncInProgress = false;
+    _activeChirpCalibrationId = null;
+    _chirpSyncStatusText = reason ?? 'Not calibrated';
+  }
+
   Future<void> _requestClockSync() async {
     if (!isClient ||
         _connectedEndpointIds.isEmpty ||
@@ -1324,9 +1549,7 @@ class RaceSessionController extends ChangeNotifier {
     final clientSensorMinusElapsedNanos =
         _motionController.sensorMinusElapsedNanos;
     final hostSensorMinusElapsedNanos = _hostSensorMinusElapsedNanos;
-    final hostMinusClientElapsedNanos =
-        _gpsHostMinusClientElapsedNanosIfFresh() ??
-        _hostMinusClientElapsedNanos;
+    final hostMinusClientElapsedNanos = _currentHostMinusClientElapsedNanos();
     if (clientSensorMinusElapsedNanos == null ||
         hostMinusClientElapsedNanos == null ||
         hostSensorMinusElapsedNanos == null) {
@@ -1343,9 +1566,7 @@ class RaceSessionController extends ChangeNotifier {
       return null;
     }
     final hostSensorMinusElapsedNanos = _hostSensorMinusElapsedNanos;
-    final hostMinusClientElapsedNanos =
-        _gpsHostMinusClientElapsedNanosIfFresh() ??
-        _hostMinusClientElapsedNanos;
+    final hostMinusClientElapsedNanos = _currentHostMinusClientElapsedNanos();
     final localSensorMinusElapsedNanos =
         _motionController.sensorMinusElapsedNanos;
     if (hostSensorMinusElapsedNanos == null ||
@@ -1385,7 +1606,9 @@ class RaceSessionController extends ChangeNotifier {
   }
 
   bool _isClockLockValid() {
-    return _hasFreshGpsClockLock() || _isNtpClockLockValid();
+    return _hasFreshGpsClockLock() ||
+        _isChirpClockLockValid() ||
+        _isNtpClockLockValid();
   }
 
   bool _shouldRunNtpSync() {
@@ -1402,6 +1625,29 @@ class RaceSessionController extends ChangeNotifier {
       return null;
     }
     return clientGpsUtcOffsetNanos - hostGpsUtcOffsetNanos;
+  }
+
+  int? _chirpHostMinusClientElapsedNanosIfValid() {
+    if (!_isChirpClockLockValid()) {
+      return null;
+    }
+    return _chirpHostMinusClientElapsedNanos;
+  }
+
+  bool _isChirpClockLockValid() {
+    if (!_chirpLockActive) {
+      return false;
+    }
+    return _chirpHostMinusClientElapsedNanos != null &&
+        _chirpLastCalibratedElapsedNanos != null &&
+        _hostSensorMinusElapsedNanos != null &&
+        _motionController.sensorMinusElapsedNanos != null;
+  }
+
+  int? _currentHostMinusClientElapsedNanos() {
+    return _gpsHostMinusClientElapsedNanosIfFresh() ??
+        _chirpHostMinusClientElapsedNanosIfValid() ??
+        _hostMinusClientElapsedNanos;
   }
 
   bool _hasFreshGpsClockLock() {
@@ -1734,6 +1980,7 @@ class RaceSessionController extends ChangeNotifier {
     _monitoringActive = false;
     await _setWakeLockEnabled(false, force: true);
     _clearClockSyncLock();
+    _clearChirpLock(reason: 'Not calibrated');
     _lastClockSyncRequestNanos = null;
     _hostSensorMinusElapsedNanos = null;
     _hostGpsUtcOffsetNanos = null;
@@ -1770,6 +2017,19 @@ class RaceSessionController extends ChangeNotifier {
     _activeClockSyncBurstResponseCount = 0;
     _activeClockSyncBurstHighRttRejectCount = 0;
     _clockSyncInProgress = false;
+  }
+
+  int? _readInt(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.toInt();
+    }
+    if (value is String) {
+      return int.tryParse(value);
+    }
+    return null;
   }
 
   @override

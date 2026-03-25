@@ -429,6 +429,148 @@ class SessionClockSyncResponseMessage {
   }
 }
 
+class SessionChirpSyncStartMessage {
+  const SessionChirpSyncStartMessage({
+    required this.calibrationId,
+    required this.profile,
+    required this.sampleCount,
+    required this.clientSendElapsedNanos,
+  });
+
+  final String calibrationId;
+  final String profile;
+  final int sampleCount;
+  final int clientSendElapsedNanos;
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'type': 'chirp_sync_start',
+      'calibrationId': calibrationId,
+      'profile': profile,
+      'sampleCount': sampleCount,
+      'clientSendElapsedNanos': clientSendElapsedNanos,
+    };
+  }
+
+  String toJsonString() => jsonEncode(toJson());
+
+  static SessionChirpSyncStartMessage? tryParse(String raw) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic> ||
+          decoded['type'] != 'chirp_sync_start') {
+        return null;
+      }
+      final calibrationId = decoded['calibrationId']?.toString();
+      final profile = decoded['profile']?.toString();
+      final sampleCountRaw = decoded['sampleCount'];
+      final clientSendElapsedNanosRaw = decoded['clientSendElapsedNanos'];
+      if (calibrationId == null ||
+          calibrationId.isEmpty ||
+          profile == null ||
+          profile.isEmpty ||
+          sampleCountRaw is! num ||
+          clientSendElapsedNanosRaw is! num) {
+        return null;
+      }
+      return SessionChirpSyncStartMessage(
+        calibrationId: calibrationId,
+        profile: profile,
+        sampleCount: sampleCountRaw.toInt(),
+        clientSendElapsedNanos: clientSendElapsedNanosRaw.toInt(),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+class SessionChirpSyncResultMessage {
+  const SessionChirpSyncResultMessage({
+    required this.calibrationId,
+    required this.accepted,
+    this.hostMinusClientElapsedNanos,
+    this.jitterNanos,
+    this.reason,
+    this.completedAtElapsedNanos,
+  });
+
+  final String calibrationId;
+  final bool accepted;
+  final int? hostMinusClientElapsedNanos;
+  final int? jitterNanos;
+  final String? reason;
+  final int? completedAtElapsedNanos;
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'type': 'chirp_sync_result',
+      'calibrationId': calibrationId,
+      'accepted': accepted,
+      'hostMinusClientElapsedNanos': hostMinusClientElapsedNanos,
+      'jitterNanos': jitterNanos,
+      'reason': reason,
+      'completedAtElapsedNanos': completedAtElapsedNanos,
+    };
+  }
+
+  String toJsonString() => jsonEncode(toJson());
+
+  static SessionChirpSyncResultMessage? tryParse(String raw) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic> ||
+          decoded['type'] != 'chirp_sync_result') {
+        return null;
+      }
+      final calibrationId = decoded['calibrationId']?.toString();
+      final accepted = decoded['accepted'];
+      if (calibrationId == null || calibrationId.isEmpty || accepted is! bool) {
+        return null;
+      }
+      return SessionChirpSyncResultMessage(
+        calibrationId: calibrationId,
+        accepted: accepted,
+        hostMinusClientElapsedNanos:
+            (decoded['hostMinusClientElapsedNanos'] as num?)?.toInt(),
+        jitterNanos: (decoded['jitterNanos'] as num?)?.toInt(),
+        reason: decoded['reason']?.toString(),
+        completedAtElapsedNanos: (decoded['completedAtElapsedNanos'] as num?)
+            ?.toInt(),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+class SessionChirpSyncClearMessage {
+  const SessionChirpSyncClearMessage({this.reason});
+
+  final String? reason;
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{'type': 'chirp_sync_clear', 'reason': reason};
+  }
+
+  String toJsonString() => jsonEncode(toJson());
+
+  static SessionChirpSyncClearMessage? tryParse(String raw) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic> ||
+          decoded['type'] != 'chirp_sync_clear') {
+        return null;
+      }
+      return SessionChirpSyncClearMessage(
+        reason: decoded['reason']?.toString(),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
 SessionStage? sessionStageFromName(String? name) {
   if (name == null) {
     return null;

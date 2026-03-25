@@ -1,10 +1,9 @@
-Personal Project. All devices are known & physical access if avaible 
+Personal Project. All devices are known & physical access if avaible , ANDROID ONLY ALWAYS
 check "C:\Users\paul\projects\photo-finish\device_specs.md"
 Serena init calls must run sequentially to avoid active-project race conditions:
-1. `serena.activate_project`
-2. `serena.check_onboarding_performed`
-3. `serena.initial_instructions`
-Do not run these three calls in parallel.
+1. `serena.check_onboarding_performed`
+2. `serena.initial_instructions`
+
 # context-mode — MANDATORY routing rules
 
 You have context-mode MCP tools available. These rules are NOT optional — they protect your context window from flooding. A single unrouted command can dump 56 KB into context and waste the entire session. Codex CLI does NOT have hooks, so these instructions are your ONLY enforcement mechanism. Follow them strictly.

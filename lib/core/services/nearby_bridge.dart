@@ -165,6 +165,61 @@ class NearbyBridge {
     });
   }
 
+  Future<Map<String, dynamic>> getChirpCapabilities() async {
+    try {
+      final response = await _methodChannel.invokeMethod<dynamic>(
+        'getChirpCapabilities',
+      );
+      if (response is Map) {
+        return Map<String, dynamic>.from(response);
+      }
+    } on MissingPluginException {
+      // Non-Android and tests may not expose native chirp support.
+    } on PlatformException catch (error) {
+      if (error.code != 'unimplemented') {
+        rethrow;
+      }
+    }
+    return <String, dynamic>{
+      'supported': false,
+      'supportsMicNearUltrasound': false,
+      'supportsSpeakerNearUltrasound': false,
+      'selectedProfile': 'fallback',
+    };
+  }
+
+  Future<Map<String, dynamic>> startChirpSync({
+    required String calibrationId,
+    required String role,
+    required String profile,
+    required int sampleCount,
+    int? remoteSendElapsedNanos,
+  }) async {
+    final response = await _methodChannel
+        .invokeMethod<dynamic>('startChirpSync', {
+          'calibrationId': calibrationId,
+          'role': role,
+          'profile': profile,
+          'sampleCount': sampleCount,
+          'remoteSendElapsedNanos': remoteSendElapsedNanos,
+        });
+    if (response is Map) {
+      return Map<String, dynamic>.from(response);
+    }
+    return <String, dynamic>{
+      'accepted': false,
+      'reason': 'No chirp sync response from native layer.',
+    };
+  }
+
+  Future<void> stopChirpSync() {
+    return _methodChannel.invokeMethod<void>('stopChirpSync');
+  }
+
+  Future<void> clearChirpSync() {
+    return _methodChannel.invokeMethod<void>('clearChirpSync');
+  }
+
   Future<void> disconnect({required String endpointId}) {
     return _methodChannel.invokeMethod<void>('disconnect', {
       'endpointId': endpointId,

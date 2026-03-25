@@ -46,6 +46,54 @@ void main() {
     expect(decoded.hostSendElapsedNanos, 21);
   });
 
+  test('chirp sync start serializes and parses fields', () {
+    const message = SessionChirpSyncStartMessage(
+      calibrationId: 'chirp_1',
+      profile: 'fallback',
+      sampleCount: 9,
+      clientSendElapsedNanos: 1234,
+    );
+
+    final encoded = message.toJsonString();
+    final decoded = SessionChirpSyncStartMessage.tryParse(encoded);
+
+    expect(decoded, isNotNull);
+    expect(decoded!.calibrationId, 'chirp_1');
+    expect(decoded.profile, 'fallback');
+    expect(decoded.sampleCount, 9);
+    expect(decoded.clientSendElapsedNanos, 1234);
+  });
+
+  test('chirp sync result serializes and parses fields', () {
+    const message = SessionChirpSyncResultMessage(
+      calibrationId: 'chirp_1',
+      accepted: true,
+      hostMinusClientElapsedNanos: 456,
+      jitterNanos: 789,
+      completedAtElapsedNanos: 1111,
+    );
+
+    final encoded = message.toJsonString();
+    final decoded = SessionChirpSyncResultMessage.tryParse(encoded);
+
+    expect(decoded, isNotNull);
+    expect(decoded!.calibrationId, 'chirp_1');
+    expect(decoded.accepted, isTrue);
+    expect(decoded.hostMinusClientElapsedNanos, 456);
+    expect(decoded.jitterNanos, 789);
+    expect(decoded.completedAtElapsedNanos, 1111);
+  });
+
+  test('chirp sync clear serializes and parses', () {
+    const message = SessionChirpSyncClearMessage(reason: 'manual');
+
+    final encoded = message.toJsonString();
+    final decoded = SessionChirpSyncClearMessage.tryParse(encoded);
+
+    expect(decoded, isNotNull);
+    expect(decoded!.reason, 'manual');
+  });
+
   test('session device camera facing serializes and parses', () {
     const device = SessionDevice(
       id: 'device-1',

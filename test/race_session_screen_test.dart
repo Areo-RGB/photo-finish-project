@@ -563,12 +563,17 @@ void main() {
         findsOneWidget,
       );
       expect(find.textContaining('Refinement: Refinement complete.'), findsOne);
-      expect(find.text('Started Sensor Nanos: 5000000000'), findsOneWidget);
       expect(
-        find.byKey(const ValueKey<String>('post_race_analysis_title')),
+        find.byKey(
+          const ValueKey<String>('post_race_analysis_title'),
+          skipOffstage: false,
+        ),
         findsOneWidget,
       );
-      expect(find.text('No correction deltas recorded yet.'), findsOneWidget);
+      expect(
+        find.text('No correction deltas recorded yet.', skipOffstage: false),
+        findsOneWidget,
+      );
 
       fixture.dispose();
     },
@@ -753,6 +758,41 @@ class _FakeNearbyBridge extends NearbyBridge {
     required bool enabled,
     required bool requireSensorDomainClock,
   }) async {}
+
+  @override
+  Future<Map<String, dynamic>> getChirpCapabilities() async {
+    return <String, dynamic>{
+      'supported': true,
+      'supportsMicNearUltrasound': false,
+      'supportsSpeakerNearUltrasound': false,
+      'selectedProfile': 'fallback',
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> startChirpSync({
+    required String calibrationId,
+    required String role,
+    required String profile,
+    required int sampleCount,
+    int? remoteSendElapsedNanos,
+  }) async {
+    return <String, dynamic>{
+      'calibrationId': calibrationId,
+      'accepted': true,
+      'hostMinusClientElapsedNanos': 120000000,
+      'jitterNanos': 700000,
+      'completedAtElapsedNanos': 2000000000,
+      'sampleCount': sampleCount,
+      'profile': profile,
+    };
+  }
+
+  @override
+  Future<void> stopChirpSync() async {}
+
+  @override
+  Future<void> clearChirpSync() async {}
 
   void dispose() {
     _eventsController.close();

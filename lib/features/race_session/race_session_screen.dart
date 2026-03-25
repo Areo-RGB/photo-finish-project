@@ -166,7 +166,6 @@ class _RaceSessionScreenState extends State<RaceSessionScreen> {
               ),
             ),
           ],
-          const SizedBox(height: 12),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(12),
@@ -244,6 +243,8 @@ class _RaceSessionScreenState extends State<RaceSessionScreen> {
             ),
           ),
           const SizedBox(height: 12),
+          _buildChirpSyncCard(),
+          const SizedBox(height: 12),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(12),
@@ -290,6 +291,8 @@ class _RaceSessionScreenState extends State<RaceSessionScreen> {
           ),
           const SizedBox(height: 12),
           _buildTimelineCard(),
+          const SizedBox(height: 12),
+          _buildChirpSyncCard(),
         ],
       ),
     );
@@ -303,6 +306,10 @@ class _RaceSessionScreenState extends State<RaceSessionScreen> {
     final latencyLabel = switch (syncModeLabel) {
       'NTP' => latencyMs == null ? '-' : '$latencyMs ms',
       'GPS' => 'GPS',
+      'CHIRP' =>
+        controller.chirpQualityUs == null
+            ? 'Chirp'
+            : '${controller.chirpQualityUs} us',
       _ => '-',
     };
     final clockLockWarningText = controller.clockLockWarningText;
@@ -464,6 +471,58 @@ class _RaceSessionScreenState extends State<RaceSessionScreen> {
     );
   }
 
+  Widget _buildChirpSyncCard() {
+    final canStart =
+        controller.isClient &&
+        controller.hasConnectedPeers &&
+        !controller.chirpSyncInProgress;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Audio Chirp Sync',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Status: ${controller.chirpSyncStatusText}',
+              key: const ValueKey<String>('chirp_sync_status_text'),
+              style: const TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.icon(
+                  key: const ValueKey<String>('start_chirp_sync_button'),
+                  onPressed: canStart
+                      ? controller.startChirpSyncCalibration
+                      : null,
+                  icon: const Icon(Icons.graphic_eq, size: 18),
+                  label: const Text('Start Chirp Sync'),
+                ),
+                FilledButton.icon(
+                  key: const ValueKey<String>('end_chirp_sync_button'),
+                  onPressed:
+                      controller.chirpLockActive ||
+                          controller.chirpSyncInProgress
+                      ? controller.endChirpSyncCalibration
+                      : null,
+                  icon: const Icon(Icons.clear, size: 18),
+                  label: const Text('End Chirp Sync'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildRoleRow(SessionDevice device) {
     final canEdit = controller.isHost && !controller.monitoringActive;
     final allRoles = <SessionDeviceRole>[
@@ -614,6 +673,6 @@ class _RaceSessionScreenState extends State<RaceSessionScreen> {
   String _formatDeltaNanos(int deltaNanos) {
     final deltaMs = deltaNanos / 1000000.0;
     final sign = deltaMs >= 0 ? '+' : '';
-    return 'Δ ${sign}${deltaMs.toStringAsFixed(2)}ms';
+    return 'Δ $sign${deltaMs.toStringAsFixed(2)}ms';
   }
 }
