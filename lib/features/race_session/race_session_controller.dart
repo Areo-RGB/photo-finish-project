@@ -420,6 +420,10 @@ class RaceSessionController extends ChangeNotifier {
     notifyListeners();
     try {
       final capabilities = await _nearbyBridge.getChirpCapabilities();
+      if (capabilities['supported'] != true) {
+        _chirpSyncStatusText = 'Calibrating (degraded timestamp path)';
+        notifyListeners();
+      }
       _chirpProfile = _resolveChirpProfile(capabilities);
       await _nearbyBridge.startChirpSync(
         calibrationId: calibrationId,
@@ -826,7 +830,12 @@ class RaceSessionController extends ChangeNotifier {
       final message = event['message']?.toString();
       _chirpSyncInProgress = false;
       _activeChirpCalibrationId = null;
-      _chirpSyncStatusText = message == null ? 'Failed' : 'Failed ($message)';
+      final displayMessage = message == 'Audio timestamp path unavailable'
+          ? 'Audio timestamp unsupported on one or both devices'
+          : message;
+      _chirpSyncStatusText = displayMessage == null
+          ? 'Failed'
+          : 'Failed ($displayMessage)';
       notifyListeners();
       return;
     }
@@ -1381,9 +1390,11 @@ class RaceSessionController extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    _clearChirpLock(
-      reason: 'Failed (${result.reason ?? 'quality threshold not met'})',
-    );
+    final reason = result.reason ?? 'quality threshold not met';
+    final displayReason = reason == 'Audio timestamp path unavailable'
+        ? 'Audio timestamp unsupported on one or both devices'
+        : reason;
+    _clearChirpLock(reason: 'Failed ($displayReason)');
     notifyListeners();
   }
 

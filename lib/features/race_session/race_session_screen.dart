@@ -291,8 +291,6 @@ class _RaceSessionScreenState extends State<RaceSessionScreen> {
           ),
           const SizedBox(height: 12),
           _buildTimelineCard(),
-          const SizedBox(height: 12),
-          _buildChirpSyncCard(),
         ],
       ),
     );

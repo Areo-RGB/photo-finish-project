@@ -129,8 +129,9 @@ class AcousticChirpSyncEngine(
             supportsMicNearUltrasound = supportsMicNearUltrasound,
             supportsSpeakerNearUltrasound = supportsSpeakerNearUltrasound,
         )
+        val supported = probeAudioTimestampPath(selectedProfile)
         return ChirpCapabilities(
-            supported = true,
+            supported = supported,
             supportsMicNearUltrasound = supportsMicNearUltrasound,
             supportsSpeakerNearUltrasound = supportsSpeakerNearUltrasound,
             selectedProfile = selectedProfile,
@@ -161,28 +162,33 @@ class AcousticChirpSyncEngine(
             supportsMicNearUltrasound = capabilities.supportsMicNearUltrasound,
             supportsSpeakerNearUltrasound = capabilities.supportsSpeakerNearUltrasound,
         )
-
-        if (!probeAudioTimestampPath(selectedProfile)) {
-            return ChirpCalibrationResult(
-                calibrationId = calibrationId,
-                accepted = false,
-                hostMinusClientElapsedNanos = null,
-                jitterNanos = null,
-                reason = "Audio timestamp path unavailable",
-                completedAtElapsedNanos = nowElapsedNanos(),
-                profile = selectedProfile,
-                sampleCount = sampleCount,
-            )
+        val timestampPathAvailable = if (selectedProfile == capabilities.selectedProfile) {
+            capabilities.supported
+        } else {
+            probeAudioTimestampPath(selectedProfile)
         }
+        val outputSampleRate = (context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager)
+            ?.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)
+            ?.toIntOrNull()
+            ?: 48_000
 
         val normalizedRole = role.trim().lowercase()
         if (normalizedRole == "initiator") {
+            // Always emit the initiator chirp even when timestamp probing is degraded.
+            emitCalibrationChirp(
+                profile = selectedProfile,
+                sampleRate = outputSampleRate,
+            )
             return ChirpCalibrationResult(
                 calibrationId = calibrationId,
                 accepted = true,
                 hostMinusClientElapsedNanos = null,
                 jitterNanos = null,
-                reason = "Initiator ready",
+                reason = if (timestampPathAvailable) {
+                    "Initiator ready"
+                } else {
+                    "Initiator ready (degraded timestamp path)"
+                },
                 completedAtElapsedNanos = nowElapsedNanos(),
                 profile = selectedProfile,
                 sampleCount = sampleCount.coerceAtLeast(3),
@@ -217,6 +223,10 @@ class AcousticChirpSyncEngine(
                     sampleCount = rounds,
                 )
             }
+            emitCalibrationChirp(
+                profile = selectedProfile,
+                sampleRate = outputSampleRate,
+            )
             val clientSend = remoteSendElapsedNanos + (index * 250_000L)
             val hostReceive = nowElapsedNanos() + (index * 50_000L)
             val hostSend = hostReceive + 80_000L
@@ -273,20 +283,131 @@ class AcousticChirpSyncEngine(
             AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT,
         ).coerceAtLeast(4096)
-        val source = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            MediaRecorder.AudioSource.UNPROCESSED
-        } else {
-            MediaRecorder.AudioSource.MIC
-        }
+        val sources = buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                add(MediaRecorder.AudioSource.UNPROCESSED)
+            }
+            add(MediaRecorder.AudioSource.MIC)
+        }.distinct()
 
+        for (source in sources) {
+            var audioTrack: AudioTrack? = null
+            var audioRecord: AudioRecord? = null
+            try {
+                audioTrack = AudioTrack.Builder()
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build(),
+                    )
+                    .setAudioFormat(
+                        AudioFormat.Builder()
+                            .setSampleRate(sampleRate)
+                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                            .build(),
+                    )
+                    .setTransferMode(AudioTrack.MODE_STREAM)
+                    .setBufferSizeInBytes(outputMinBuffer)
+                    .build()
+
+                audioRecord = AudioRecord.Builder()
+                    .setAudioSource(source)
+                    .setAudioFormat(
+                        AudioFormat.Builder()
+                            .setSampleRate(sampleRate)
+                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                            .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
+                            .build(),
+                    )
+                    .setBufferSizeInBytes(inputMinBuffer)
+                    .build()
+
+                if (audioTrack.state != AudioTrack.STATE_INITIALIZED ||
+                    audioRecord.state != AudioRecord.STATE_INITIALIZED
+                ) {
+                    continue
+                }
+
+                val chirp = generateProbeTone(
+                    sampleRate = sampleRate,
+                    profile = profile,
+                    durationMs = 24,
+                )
+                audioRecord.startRecording()
+                audioTrack.play()
+                audioTrack.write(chirp, 0, chirp.size, AudioTrack.WRITE_BLOCKING)
+
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+                    return true
+                }
+
+                val recordTimestamp = AudioTimestamp()
+                val trackTimestamp = AudioTimestamp()
+                val deadline = SystemClock.elapsedRealtimeNanos() + 350_000_000L
+                while (SystemClock.elapsedRealtimeNanos() < deadline) {
+                    val recordBootStatus = audioRecord.getTimestamp(
+                        recordTimestamp,
+                        AudioTimestamp.TIMEBASE_BOOTTIME,
+                    )
+                    val recordMonoStatus = audioRecord.getTimestamp(
+                        recordTimestamp,
+                        AudioTimestamp.TIMEBASE_MONOTONIC,
+                    )
+                    val trackStatus = audioTrack.getTimestamp(trackTimestamp)
+                    val hasRecordTimestamp =
+                        recordBootStatus == AudioRecord.SUCCESS ||
+                            recordMonoStatus == AudioRecord.SUCCESS
+                    if (hasRecordTimestamp && trackStatus) {
+                        return true
+                    }
+                    SystemClock.sleep(12)
+                }
+            } catch (_: Throwable) {
+                // Try next source variant.
+            } finally {
+                try {
+                    audioRecord?.stop()
+                } catch (_: Throwable) {
+                }
+                try {
+                    audioTrack?.pause()
+                    audioTrack?.flush()
+                } catch (_: Throwable) {
+                }
+                try {
+                    audioRecord?.release()
+                } catch (_: Throwable) {
+                }
+                try {
+                    audioTrack?.release()
+                } catch (_: Throwable) {
+                }
+            }
+        }
+        return false
+    }
+
+    private fun emitCalibrationChirp(profile: String, sampleRate: Int): Boolean {
         var audioTrack: AudioTrack? = null
-        var audioRecord: AudioRecord? = null
         return try {
+            val outputMinBuffer = AudioTrack.getMinBufferSize(
+                sampleRate,
+                AudioFormat.CHANNEL_OUT_MONO,
+                AudioFormat.ENCODING_PCM_16BIT,
+            ).coerceAtLeast(4096)
+            val durationMs = if (profile == PROFILE_NEAR_ULTRASOUND) 24 else 96
+            val chirp = generateProbeTone(
+                sampleRate = sampleRate,
+                profile = profile,
+                durationMs = durationMs,
+            )
             audioTrack = AudioTrack.Builder()
                 .setAudioAttributes(
                     AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                         .build(),
                 )
                 .setAudioFormat(
@@ -299,60 +420,20 @@ class AcousticChirpSyncEngine(
                 .setTransferMode(AudioTrack.MODE_STREAM)
                 .setBufferSizeInBytes(outputMinBuffer)
                 .build()
-
-            audioRecord = AudioRecord.Builder()
-                .setAudioSource(source)
-                .setAudioFormat(
-                    AudioFormat.Builder()
-                        .setSampleRate(sampleRate)
-                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                        .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
-                        .build(),
-                )
-                .setBufferSizeInBytes(inputMinBuffer)
-                .build()
-
-            if (audioTrack.state != AudioTrack.STATE_INITIALIZED ||
-                audioRecord.state != AudioRecord.STATE_INITIALIZED
-            ) {
+            if (audioTrack.state != AudioTrack.STATE_INITIALIZED) {
                 return false
             }
-
-            val chirp = generateProbeTone(
-                sampleRate = sampleRate,
-                profile = profile,
-                durationMs = 16,
-            )
-            audioRecord.startRecording()
             audioTrack.play()
             audioTrack.write(chirp, 0, chirp.size, AudioTrack.WRITE_BLOCKING)
-
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-                return true
-            }
-
-            val recordTimestamp = AudioTimestamp()
-            val trackTimestamp = AudioTimestamp()
-            val recordStatus = audioRecord.getTimestamp(
-                recordTimestamp,
-                AudioTimestamp.TIMEBASE_BOOTTIME,
-            )
-            val trackStatus = audioTrack.getTimestamp(trackTimestamp)
-            recordStatus == AudioRecord.SUCCESS && trackStatus
+            val playbackMs = ((chirp.size * 1000L) / sampleRate).coerceAtLeast(12L)
+            SystemClock.sleep(playbackMs + 8L)
+            true
         } catch (_: Throwable) {
             false
         } finally {
             try {
-                audioRecord?.stop()
-            } catch (_: Throwable) {
-            }
-            try {
                 audioTrack?.pause()
                 audioTrack?.flush()
-            } catch (_: Throwable) {
-            }
-            try {
-                audioRecord?.release()
             } catch (_: Throwable) {
             }
             try {
@@ -369,14 +450,14 @@ class AcousticChirpSyncEngine(
     ): ShortArray {
         val frameCount = (sampleRate * durationMs) / 1000
         val data = ShortArray(frameCount.coerceAtLeast(1))
-        val startHz = if (profile == PROFILE_NEAR_ULTRASOUND) 18_500.0 else 8_000.0
-        val endHz = if (profile == PROFILE_NEAR_ULTRASOUND) 19_500.0 else 10_000.0
+        val startHz = if (profile == PROFILE_NEAR_ULTRASOUND) 18_500.0 else 3_200.0
+        val endHz = if (profile == PROFILE_NEAR_ULTRASOUND) 19_500.0 else 4_800.0
         for (index in data.indices) {
             val t = index.toDouble() / sampleRate.toDouble()
             val ratio = index.toDouble() / data.size.toDouble()
             val freq = startHz + ((endHz - startHz) * ratio)
             val sample = sin(2.0 * PI * freq * t)
-            val amplitude = if (profile == PROFILE_NEAR_ULTRASOUND) 0.25 else 0.35
+            val amplitude = if (profile == PROFILE_NEAR_ULTRASOUND) 0.25 else 0.85
             data[index] = (sample * Short.MAX_VALUE * amplitude).toInt()
                 .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
                 .toShort()
