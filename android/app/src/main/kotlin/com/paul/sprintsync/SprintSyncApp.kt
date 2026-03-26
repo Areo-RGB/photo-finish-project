@@ -20,10 +20,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -118,8 +123,6 @@ fun SprintSyncApp(
     onResetRun: () -> Unit,
     onAssignRole: (String, SessionDeviceRole) -> Unit,
     onAssignCameraFacing: (String, SessionCameraFacing) -> Unit,
-    onAssignHighSpeedEnabled: (String, Boolean) -> Unit,
-    onClockSyncBurst: () -> Unit,
     onStartChirpSync: () -> Unit,
     onEndChirpSync: () -> Unit,
     onUpdateThreshold: (Double) -> Unit,
@@ -206,13 +209,10 @@ fun SprintSyncApp(
                     item {
                         LobbyActionsCard(
                             isHost = uiState.isHost,
-                            networkRole = uiState.networkRole,
-                            connectedCount = uiState.connectedEndpoints.size,
                             canStartMonitoring = uiState.canStartMonitoring,
                             timelineStarted = uiState.startedSensorNanos != null,
                             onStartMonitoring = onStartMonitoring,
                             onResetRun = onResetRun,
-                            onClockSyncBurst = onClockSyncBurst,
                             onStopHosting = onStopHosting,
                         )
                     }
@@ -234,7 +234,6 @@ fun SprintSyncApp(
                             canShowSplitControls = uiState.canShowSplitControls,
                             onAssignRole = onAssignRole,
                             onAssignCameraFacing = onAssignCameraFacing,
-                            onAssignHighSpeedEnabled = onAssignHighSpeedEnabled,
                         )
                     }
                     item {
@@ -405,40 +404,29 @@ private fun EndpointRow(
 @Composable
 private fun LobbyActionsCard(
     isHost: Boolean,
-    networkRole: SessionNetworkRole,
-    connectedCount: Int,
     canStartMonitoring: Boolean,
     timelineStarted: Boolean,
     onStartMonitoring: () -> Unit,
     onResetRun: () -> Unit,
-    onClockSyncBurst: () -> Unit,
     onStopHosting: () -> Unit,
 ) {
     Card {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Session Actions", fontWeight = FontWeight.SemiBold)
-            Text("Role: ${networkRole.name.lowercase()}")
-            Text("Connected peers: $connectedCount")
             Button(
                 onClick = onStartMonitoring,
-                enabled = networkRole == SessionNetworkRole.HOST && canStartMonitoring,
+                enabled = isHost && canStartMonitoring,
             ) {
                 Text("Start Monitoring")
+            }
+            if (isHost) {
+                OutlinedButton(onClick = onStopHosting) {
+                    Text("Stop Hosting")
+                }
             }
             if (isHost && timelineStarted) {
                 OutlinedButton(onClick = onResetRun) {
                     Text("Reset Run")
-                }
-            }
-            if (networkRole == SessionNetworkRole.CLIENT) {
-                Text("Waiting for host to start monitoring", style = MaterialTheme.typography.bodySmall)
-            }
-            OutlinedButton(onClick = onClockSyncBurst, enabled = connectedCount > 0) {
-                Text("Clock Sync")
-            }
-            if (isHost) {
-                OutlinedButton(onClick = onStopHosting, enabled = networkRole != SessionNetworkRole.NONE) {
-                    Text("Stop Hosting")
                 }
             }
         }
@@ -480,11 +468,17 @@ private fun DeviceAssignmentsCard(
     canShowSplitControls: Boolean,
     onAssignRole: (String, SessionDeviceRole) -> Unit,
     onAssignCameraFacing: (String, SessionCameraFacing) -> Unit,
-    onAssignHighSpeedEnabled: (String, Boolean) -> Unit,
 ) {
     Card {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Device Roles", fontWeight = FontWeight.SemiBold)
+            if (editable) {
+                Text(
+                    "Assign roles to connected devices.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray,
+                )
+            }
             devices.forEach { device ->
                 DeviceAssignmentRow(
                     device = device,
@@ -492,7 +486,6 @@ private fun DeviceAssignmentsCard(
                     canShowSplitControls = canShowSplitControls,
                     onAssignRole = onAssignRole,
                     onAssignCameraFacing = onAssignCameraFacing,
-                    onAssignHighSpeedEnabled = onAssignHighSpeedEnabled,
                 )
             }
         }
@@ -506,8 +499,9 @@ private fun DeviceAssignmentRow(
     canShowSplitControls: Boolean,
     onAssignRole: (String, SessionDeviceRole) -> Unit,
     onAssignCameraFacing: (String, SessionCameraFacing) -> Unit,
-    onAssignHighSpeedEnabled: (String, Boolean) -> Unit,
 ) {
+    var roleMenuExpanded by remember(device.id) { mutableStateOf(false) }
+
     Card {
         Column(
             modifier = Modifier
@@ -520,7 +514,6 @@ private fun DeviceAssignmentRow(
                 fontWeight = FontWeight.Medium,
             )
             Text(device.id, style = MaterialTheme.typography.bodySmall)
-            Text("Role: ${sessionDeviceRoleLabel(device.role)}")
             if (editable) {
                 val roleOptions = buildList {
                     add(SessionDeviceRole.UNASSIGNED)
@@ -530,31 +523,51 @@ private fun DeviceAssignmentRow(
                     }
                     add(SessionDeviceRole.STOP)
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    roleOptions.forEach { option ->
-                        AssistChip(
-                            onClick = { onAssignRole(device.id, option) },
-                            label = { Text(sessionDeviceRoleLabel(option)) },
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SingleChoiceSegmentedButtonRow {
+                        SegmentedButton(
+                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                            onClick = { onAssignCameraFacing(device.id, SessionCameraFacing.REAR) },
+                            selected = device.cameraFacing == SessionCameraFacing.REAR,
+                            label = { Text("Rear") },
+                        )
+                        SegmentedButton(
+                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                            onClick = { onAssignCameraFacing(device.id, SessionCameraFacing.FRONT) },
+                            selected = device.cameraFacing == SessionCameraFacing.FRONT,
+                            label = { Text("Front") },
                         )
                     }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AssistChip(
-                        onClick = { onAssignCameraFacing(device.id, SessionCameraFacing.REAR) },
-                        label = { Text("Rear") },
-                    )
-                    AssistChip(
-                        onClick = { onAssignCameraFacing(device.id, SessionCameraFacing.FRONT) },
-                        label = { Text("Front") },
-                    )
-                    AssistChip(
-                        onClick = { onAssignHighSpeedEnabled(device.id, !device.highSpeedEnabled) },
-                        label = { Text(if (device.highSpeedEnabled) "HS On" else "HS Off") },
-                    )
+
+                    Box {
+                        AssistChip(
+                            onClick = { roleMenuExpanded = true },
+                            label = { Text(sessionDeviceRoleLabel(device.role)) },
+                        )
+                        DropdownMenu(
+                            expanded = roleMenuExpanded,
+                            onDismissRequest = { roleMenuExpanded = false },
+                        ) {
+                            roleOptions.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(sessionDeviceRoleLabel(option)) },
+                                    onClick = {
+                                        onAssignRole(device.id, option)
+                                        roleMenuExpanded = false
+                                    },
+                                )
+                            }
+                        }
+                    }
                 }
             } else {
+                Text("Role: ${sessionDeviceRoleLabel(device.role)}")
                 Text("Camera: ${sessionCameraFacingLabel(device.cameraFacing)}")
-                Text("High Speed: ${if (device.highSpeedEnabled) "On" else "Off"}")
             }
         }
     }

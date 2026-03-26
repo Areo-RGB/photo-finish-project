@@ -193,19 +193,6 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
                     raceSessionController.assignCameraFacing(deviceId, facing)
                     syncControllerSummaries()
                 },
-                onAssignHighSpeedEnabled = { deviceId, enabled ->
-                    raceSessionController.assignHighSpeedEnabled(deviceId, enabled)
-                    syncControllerSummaries()
-                },
-                onClockSyncBurst = {
-                    val endpointId = firstConnectedEndpointId()
-                    if (endpointId == null) {
-                        appendEvent("clock sync ignored: no connected endpoint")
-                    } else {
-                        raceSessionController.startClockSyncBurst(endpointId)
-                    }
-                    syncControllerSummaries()
-                },
                 onStartChirpSync = {
                     val endpointId = firstConnectedEndpointId()
                     if (endpointId == null) {
