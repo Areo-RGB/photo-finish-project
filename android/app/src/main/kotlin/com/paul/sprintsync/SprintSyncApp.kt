@@ -1,5 +1,8 @@
 package com.paul.sprintsync
 
+import com.paul.sprintsync.ui.components.*
+import com.paul.sprintsync.ui.theme.*
+
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -161,9 +164,7 @@ fun SprintSyncApp(
                         style = MaterialTheme.typography.headlineSmall,
                     )
                     if (uiState.stage == SessionStage.MONITORING && uiState.isHost) {
-                        OutlinedButton(onClick = onStopMonitoring) {
-                            Text("Stop")
-                        }
+                        SecondaryButton(text = "Stop", onClick = onStopMonitoring)
                     }
                 }
             }
@@ -315,14 +316,14 @@ fun SprintSyncApp(
 
 @Composable
 private fun StatusCard(uiState: SprintSyncUiState) {
-    Card {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Session Status", fontWeight = FontWeight.SemiBold)
-            Text("Stage: ${uiState.sessionSummary}")
-            Text("Network: ${uiState.networkSummary}")
-            Text("Motion: ${uiState.monitoringSummary}")
-            Text("Clock: ${uiState.clockSummary}")
-            Text("Chirp: ${uiState.chirpSummary}")
+    SprintSyncCard {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            SectionHeader("Session Status")
+            MetricDisplay(label = "Stage", value = uiState.sessionSummary)
+            MetricDisplay(label = "Network", value = uiState.networkSummary)
+            MetricDisplay(label = "Motion", value = uiState.monitoringSummary)
+            MetricDisplay(label = "Clock", value = uiState.clockSummary)
+            MetricDisplay(label = "Chirp", value = uiState.chirpSummary)
             uiState.lastNearbyEvent?.let { Text("Last Nearby: $it") }
             uiState.lastSensorEvent?.let { Text("Last Sensor: $it") }
             if (!uiState.permissionGranted && uiState.deniedPermissions.isNotEmpty()) {
@@ -349,33 +350,21 @@ private fun SetupActionsCard(
 ) {
     val setupActionsEnabled = !setupBusy
 
-    Card {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Network Connection", fontWeight = FontWeight.SemiBold)
+    SprintSyncCard {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SectionHeader("Network Connection")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!permissionGranted) {
-                    Button(onClick = onRequestPermissions, enabled = setupActionsEnabled) {
-                        Text("Permissions")
-                    }
+                    PrimaryButton(text = "Permissions", onClick = onRequestPermissions, enabled = setupActionsEnabled)
                 }
-                Button(onClick = onStartHosting, enabled = setupActionsEnabled) {
-                    Text("Host")
-                }
-                Button(onClick = onStartHostingPointToPoint, enabled = setupActionsEnabled) {
-                    Text("Host 1:1")
-                }
+                PrimaryButton(text = "Host", onClick = onStartHosting, enabled = setupActionsEnabled)
+                PrimaryButton(text = "Host 1:1", onClick = onStartHostingPointToPoint, enabled = setupActionsEnabled)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onStartDiscovery, enabled = setupActionsEnabled) {
-                    Text("Join")
-                }
-                Button(onClick = onStartDiscoveryPointToPoint, enabled = setupActionsEnabled) {
-                    Text("Join 1:1")
-                }
+                PrimaryButton(text = "Join", onClick = onStartDiscovery, enabled = setupActionsEnabled)
+                PrimaryButton(text = "Join 1:1", onClick = onStartDiscoveryPointToPoint, enabled = setupActionsEnabled)
                 if (canGoToLobby) {
-                    Button(onClick = onGoToLobby, enabled = setupActionsEnabled) {
-                        Text("Next")
-                    }
+                    PrimaryButton(text = "Next", onClick = onGoToLobby, enabled = setupActionsEnabled)
                 }
             }
         }
@@ -388,9 +377,9 @@ private fun DiscoveredDevicesCard(
     setupBusy: Boolean,
     onConnect: (String) -> Unit,
 ) {
-    Card {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Discovered Devices", fontWeight = FontWeight.SemiBold)
+    SprintSyncCard {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SectionHeader("Discovered Devices")
             discoveredEndpoints.forEach { (endpointId, endpointName) ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -401,9 +390,7 @@ private fun DiscoveredDevicesCard(
                         Text(endpointName, fontWeight = FontWeight.Medium)
                         Text(endpointId, style = MaterialTheme.typography.bodySmall)
                     }
-                    TextButton(onClick = { onConnect(endpointId) }, enabled = !setupBusy) {
-                        Text("Connect")
-                    }
+                    TextButton(onClick = { onConnect(endpointId) }, enabled = !setupBusy) { Text("Connect") }
                 }
             }
         }
@@ -419,15 +406,10 @@ private fun LobbyActionsCard(
     onResetRun: () -> Unit,
     onStopHosting: () -> Unit,
 ) {
-    Card {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Session Actions", fontWeight = FontWeight.SemiBold)
-            Button(
-                onClick = onStartMonitoring,
-                enabled = isHost && canStartMonitoring,
-            ) {
-                Text("Start Monitoring")
-            }
+    SprintSyncCard {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SectionHeader("Session Actions")
+            PrimaryButton(text = "Start Monitoring", onClick = onStartMonitoring, enabled = isHost && canStartMonitoring)
             if (isHost) {
                 OutlinedButton(onClick = onStopHosting) {
                     Text("Stop Hosting")
@@ -455,9 +437,9 @@ private fun ChirpSyncCard(
 ) {
     val canStart = (isClient || isHost) && hasConnectedPeers && !chirpSyncInProgress
     val canEnd = chirpLockActive || chirpSyncInProgress
-    Card {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Audio Chirp Sync", fontWeight = FontWeight.SemiBold)
+    SprintSyncCard {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SectionHeader("Audio Chirp Sync")
             Text("Status: $statusText", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onStartChirpSync, enabled = canStart) {
@@ -479,9 +461,9 @@ private fun DeviceAssignmentsCard(
     onAssignRole: (String, SessionDeviceRole) -> Unit,
     onAssignCameraFacing: (String, SessionCameraFacing) -> Unit,
 ) {
-    Card {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Device Roles", fontWeight = FontWeight.SemiBold)
+    SprintSyncCard {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SectionHeader("Device Roles")
             if (editable) {
                 Text(
                     "Assign roles to connected devices.",
@@ -576,8 +558,8 @@ private fun DeviceAssignmentRow(
                     }
                 }
             } else {
-                Text("Role: ${sessionDeviceRoleLabel(device.role)}")
-                Text("Camera: ${sessionCameraFacingLabel(device.cameraFacing)}")
+                MetricDisplay(label = "Role", value = sessionDeviceRoleLabel(device.role))
+                MetricDisplay(label = "Camera", value = sessionCameraFacingLabel(device.cameraFacing))
             }
         }
     }
@@ -589,11 +571,9 @@ private fun MonitoringHeaderCard(
     localRole: SessionDeviceRole,
     onResetRun: () -> Unit,
 ) {
-    Card {
+    SprintSyncCard {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -625,8 +605,8 @@ private fun MonitoringConnectionCard(
         "CHIRP" -> if (chirpQualityUs == null) "Chirp" else "$chirpQualityUs us"
         else -> "-"
     }
-    Card {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    SprintSyncCard {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Connection: $connectionTypeLabel", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
             Text("Sync: $syncModeLabel · Latency: $latencyLabel", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
         }
@@ -635,11 +615,9 @@ private fun MonitoringConnectionCard(
 
 @Composable
 private fun ClockWarningCard(text: String) {
-    Card {
+    SprintSyncCard {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(10.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Top,
         ) {
             Text("!", color = Color(0xFFD97706), fontWeight = FontWeight.Bold)
@@ -655,11 +633,9 @@ private fun PreviewToggleCard(
     effectiveShowPreview: Boolean,
     onShowPreviewChanged: (Boolean) -> Unit,
 ) {
-    Card {
+    SprintSyncCard {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("Preview")
@@ -688,26 +664,28 @@ private fun NativePreviewCard(
             modifier = Modifier
                 .padding(12.dp)
                 .fillMaxWidth(),
-            contentAlignment = Alignment.CenterStart,
+            contentAlignment = Alignment.Center,
         ) {
-            Box(modifier = Modifier.fillMaxWidth(0.34f)) {
-                Box(modifier = Modifier.aspectRatio(9f / 16f)) {
-                    AndroidView(
-                        modifier = Modifier.fillMaxSize(),
-                        factory = { context ->
-                            previewViewFactory.createPreviewView(context).also { previewViewRef = it }
-                        },
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(9f / 16f),
+            ) {
+                AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { context ->
+                        previewViewFactory.createPreviewView(context).also { previewViewRef = it }
+                    },
+                )
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val normalized = roiCenterX.coerceIn(0.0, 1.0).toFloat()
+                    val x = size.width * normalized
+                    drawLine(
+                        color = Color(0xFF005A8D),
+                        start = androidx.compose.ui.geometry.Offset(x, 0f),
+                        end = androidx.compose.ui.geometry.Offset(x, size.height),
+                        strokeWidth = 3.dp.toPx(),
                     )
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        val normalized = roiCenterX.coerceIn(0.0, 1.0).toFloat()
-                        val x = size.width * normalized
-                        drawLine(
-                            color = Color(0xFF005A8D),
-                            start = androidx.compose.ui.geometry.Offset(x, 0f),
-                            end = androidx.compose.ui.geometry.Offset(x, size.height),
-                            strokeWidth = 3.dp.toPx(),
-                        )
-                    }
                 }
             }
         }
@@ -729,35 +707,35 @@ private fun AdvancedDetectionCard(
     onUpdateCooldown: (Int) -> Unit,
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
-    Card {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    SprintSyncCard {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Advanced Detection", fontWeight = FontWeight.Bold)
+                SectionHeader("Advanced Detection")
                 OutlinedButton(onClick = { expanded = !expanded }) {
                     Text(if (expanded) "Hide" else "Show")
                 }
             }
 
             if (expanded) {
-                Text("Threshold: ${String.format("%.3f", uiState.threshold)}")
+                MetricDisplay(label = "Threshold", value = String.format("%.3f", uiState.threshold))
                 Slider(
                     value = uiState.threshold.toFloat(),
                     onValueChange = { onUpdateThreshold(it.toDouble()) },
                     valueRange = 0.001f..0.08f,
                 )
 
-                Text("ROI center: ${String.format("%.2f", uiState.roiCenterX)}")
+                MetricDisplay(label = "ROI center", value = String.format("%.2f", uiState.roiCenterX))
                 Slider(
                     value = uiState.roiCenterX.toFloat(),
                     onValueChange = { onUpdateRoiCenter(it.toDouble()) },
                     valueRange = 0.20f..0.80f,
                 )
 
-                Text("ROI width: ${String.format("%.2f", uiState.roiWidth)}")
+                MetricDisplay(label = "ROI width", value = String.format("%.2f", uiState.roiWidth))
                 Slider(
                     value = uiState.roiWidth.toFloat(),
                     onValueChange = { onUpdateRoiWidth(it.toDouble()) },
@@ -772,15 +750,15 @@ private fun AdvancedDetectionCard(
                 )
 
                 Spacer(Modifier.height(4.dp))
-                Text("Live Stats", fontWeight = FontWeight.Bold)
+                SectionHeader("Live Stats")
                 Text("Raw score: ${uiState.rawScore?.let { String.format("%.4f", it) } ?: "-"}")
                 Text("Baseline: ${uiState.baseline?.let { String.format("%.4f", it) } ?: "-"}")
                 Text("Effective: ${uiState.effectiveScore?.let { String.format("%.4f", it) } ?: "-"}")
-                Text("Frame Sensor Nanos: ${uiState.frameSensorNanos ?: "-"}")
+                MetricDisplay(label = "Frame Sensor Nanos", value = "${uiState.frameSensorNanos ?: "-"}")
                 Text("Frames: ${uiState.processedFrameCount}/${uiState.streamFrameCount}")
 
                 Spacer(Modifier.height(4.dp))
-                Text("Recent Triggers", fontWeight = FontWeight.Bold)
+                SectionHeader("Recent Triggers")
                 if (uiState.triggerHistory.isEmpty()) {
                     Text("No trigger events yet.")
                 } else {
@@ -797,23 +775,23 @@ private fun AdvancedDetectionCard(
 private fun StopwatchCard(uiState: SprintSyncUiState) {
     val fpsLabel = uiState.observedFps?.let { String.format("%.1f", it) } ?: "--.-"
     val targetSuffix = uiState.targetFpsUpper?.let { " · target $it" } ?: ""
-    Card {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Sprint Stopwatch", fontWeight = FontWeight.Bold)
-            Text("Status: ${uiState.runStatusLabel}")
-            Text("Marks: ${uiState.runMarksCount}")
+    SprintSyncCard {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SectionHeader("Sprint Stopwatch")
+            MetricDisplay(label = "Status", value = uiState.runStatusLabel)
+            MetricDisplay(label = "Marks", value = uiState.runMarksCount.toString())
             Text("Camera: $fpsLabel fps · ${uiState.cameraFpsModeLabel}$targetSuffix")
             Text("Timer")
-            Text(uiState.elapsedDisplay, style = MaterialTheme.typography.displaySmall)
+            Text(uiState.elapsedDisplay, style = MaterialTheme.typography.displaySmall.merge(TabularMonospaceTypography))
         }
     }
 }
 
 @Composable
 private fun CurrentRunMarksCard(uiState: SprintSyncUiState) {
-    Card {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Current Run Marks", fontWeight = FontWeight.Bold)
+    SprintSyncCard {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            SectionHeader("Current Run Marks")
             if (uiState.splitSensorNanos.isEmpty() && uiState.stoppedSensorNanos == null) {
                 Text("No finish mark yet.")
                 return@Column
@@ -821,11 +799,11 @@ private fun CurrentRunMarksCard(uiState: SprintSyncUiState) {
             val start = uiState.startedSensorNanos
             uiState.splitSensorNanos.forEachIndexed { index, splitSensorNanos ->
                 val splitElapsed = if (start == null) 0L else (splitSensorNanos - start).coerceAtLeast(0L)
-                Text("Split ${index + 1}: ${formatDurationNanos(splitElapsed)}")
+                MetricDisplay(label = "Split ${index + 1}", value = formatDurationNanos(splitElapsed))
             }
             val stop = uiState.stoppedSensorNanos
             if (start != null && stop != null) {
-                Text("Finish: ${formatDurationNanos((stop - start).coerceAtLeast(0L))}")
+                MetricDisplay(label = "Finish", value = formatDurationNanos((stop - start).coerceAtLeast(0L)))
             }
         }
     }
@@ -833,9 +811,9 @@ private fun CurrentRunMarksCard(uiState: SprintSyncUiState) {
 
 @Composable
 private fun ConnectedCard(connectedEndpoints: Set<String>) {
-    Card {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Connected Devices", fontWeight = FontWeight.SemiBold)
+    SprintSyncCard {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            SectionHeader("Connected Devices")
             connectedEndpoints.forEach { endpointId ->
                 Text(endpointId)
             }
@@ -845,9 +823,9 @@ private fun ConnectedCard(connectedEndpoints: Set<String>) {
 
 @Composable
 private fun ConnectedDevicesListCard(devices: List<SessionDevice>) {
-    Card {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Connected Devices", fontWeight = FontWeight.SemiBold)
+    SprintSyncCard {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            SectionHeader("Connected Devices")
             devices.forEach { device ->
                 Text(if (device.isLocal) "${device.name} (Local)" else device.name)
                 Text(device.id, style = MaterialTheme.typography.bodySmall)
@@ -858,9 +836,9 @@ private fun ConnectedDevicesListCard(devices: List<SessionDevice>) {
 
 @Composable
 private fun EventsCard(recentEvents: List<String>) {
-    Card {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text("Recent Events", fontWeight = FontWeight.SemiBold)
+    SprintSyncCard {
+        Column() {
+            SectionHeader("Recent Events")
             Spacer(Modifier.height(8.dp))
             recentEvents.forEach { event ->
                 Text(event, style = MaterialTheme.typography.bodySmall)
@@ -875,16 +853,16 @@ private fun TimelineCard(
     splitSensorNanos: List<Long>,
     stoppedSensorNanos: Long?,
 ) {
-    Card {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Race Timeline", fontWeight = FontWeight.SemiBold)
+    SprintSyncCard {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            SectionHeader("Race Timeline")
             if (startedSensorNanos == null) {
                 Text("Ready to start.")
                 return@Column
             }
             Text("Started Sensor Nanos: $startedSensorNanos")
             splitSensorNanos.forEachIndexed { index, split ->
-                Text("Split ${index + 1}: ${formatDurationNanos((split - startedSensorNanos).coerceAtLeast(0L))}")
+                MetricDisplay(label = "Split ${index + 1}", value = formatDurationNanos((split - startedSensorNanos).coerceAtLeast(0L)))
             }
             if (stoppedSensorNanos != null) {
                 val elapsed = (stoppedSensorNanos - startedSensorNanos).coerceAtLeast(0L)
@@ -901,4 +879,3 @@ private fun formatDurationNanos(nanos: Long): String {
     val millis = totalMillis % 1_000L
     return String.format("%02d:%02d.%03d", minutes, seconds, millis)
 }
-

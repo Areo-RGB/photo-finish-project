@@ -52,6 +52,7 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
     private var pendingPermissionAction: (() -> Unit)? = null
     private var timerRefreshJob: Job? = null
     private var isAppResumed: Boolean = false
+    private var localCaptureStartPending: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -91,7 +92,8 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
         }
 
         setContent {
-            SprintSyncApp(
+            com.paul.sprintsync.ui.theme.SprintSyncTheme {
+                SprintSyncApp(
                 uiState = uiState.value,
                 previewViewFactory = previewViewFactory,
                 onRequestPermissions = {
@@ -303,6 +305,7 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
                     syncControllerSummaries()
                 },
             )
+            }
         }
     }
 
@@ -395,6 +398,9 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
     }
 
     private fun onSensorEvent(event: SensorNativeEvent) {
+        if (event is SensorNativeEvent.State || event is SensorNativeEvent.Error) {
+            localCaptureStartPending = false
+        }
         motionDetectionController.handleSensorEvent(event)
         val localOffsetNanos = when (event) {
             is SensorNativeEvent.FrameStats -> event.hostSensorMinusElapsedNanos
@@ -482,9 +488,11 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
                 isAppResumed = isAppResumed,
                 shouldRunLocalCapture = shouldRunLocalCapture,
                 isLocalMotionMonitoring = motionBefore.monitoring,
+                localCaptureStartPending = localCaptureStartPending,
             )
         ) {
             LocalCaptureAction.START -> {
+                localCaptureStartPending = true
                 logRuntimeDiagnostic(
                     "local capture start: role=${raceSessionController.localDeviceRole().name} stage=${raceState.stage.name}",
                 )
@@ -493,6 +501,7 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
             }
 
             LocalCaptureAction.STOP -> {
+                localCaptureStartPending = false
                 logRuntimeDiagnostic(
                     "local capture stop: role=${raceSessionController.localDeviceRole().name} stage=${raceState.stage.name}",
                 )
@@ -807,11 +816,21 @@ internal fun resolveLocalCaptureAction(
     isAppResumed: Boolean,
     shouldRunLocalCapture: Boolean,
     isLocalMotionMonitoring: Boolean,
+    localCaptureStartPending: Boolean,
 ): LocalCaptureAction {
-    if (monitoringActive && isAppResumed && shouldRunLocalCapture && !isLocalMotionMonitoring) {
+    if (
+        monitoringActive &&
+        isAppResumed &&
+        shouldRunLocalCapture &&
+        !isLocalMotionMonitoring &&
+        !localCaptureStartPending
+    ) {
         return LocalCaptureAction.START
     }
-    if (isLocalMotionMonitoring && (!monitoringActive || !isAppResumed || !shouldRunLocalCapture)) {
+    if (
+        (isLocalMotionMonitoring || localCaptureStartPending) &&
+        (!monitoringActive || !isAppResumed || !shouldRunLocalCapture)
+    ) {
         return LocalCaptureAction.STOP
     }
     return LocalCaptureAction.NONE
