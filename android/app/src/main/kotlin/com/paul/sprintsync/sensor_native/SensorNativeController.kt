@@ -253,7 +253,6 @@ class SensorNativeController(
 
     fun warmupGpsSync() {
         startGpsUpdatesIfAvailable()
-        emitState(if (monitoring) "monitoring" else "idle")
     }
 
     fun stopNativeMonitoring() {
