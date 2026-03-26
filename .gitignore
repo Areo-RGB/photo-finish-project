@@ -22,13 +22,8 @@ migrate_working_dir/
 # is commented out by default.
 #.vscode/
 
-# Flutter/Dart/Pub related
+# Build and tooling artifacts
 **/doc/api/
-**/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins-dependencies
-.pub-cache/
-.pub/
 /build/
 /coverage/
 .env
@@ -43,3 +38,4 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 .gitnexus
+.serena/memories/

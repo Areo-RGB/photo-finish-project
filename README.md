@@ -1,10 +1,8 @@
 # Sprint Sync Android (Kotlin)
 
-This repository is the Kotlin/Compose Android app.
+This repository contains the Android-native Kotlin/Compose app.
 
-Flutter code has been moved to the standalone repository at:
-
-`C:/Users/paul/projects/photo-finish-flutter`
+Cross-platform app code lives in a separate companion repository in this workspace.
 
 ## Build and Install (Windows)
 

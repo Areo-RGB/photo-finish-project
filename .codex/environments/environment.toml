@@ -6,19 +6,19 @@ name = "photo-finish"
 script = ""
 
 [[actions]]
-name = "Run"
-icon = "run"
-command = "flutter run"
+name = "Kotlin unit tests"
+icon = "beaker"
+command = "cd android && gradlew.bat :app:testDebugUnitTest"
 
 [[actions]]
-name = "Run debug (all devices)"
-icon = "play"
-command = "flutter run --debug -d all"
+name = "Android debug assemble"
+icon = "tools"
+command = "cd android && gradlew.bat :app:assembleDebug"
 
 [[actions]]
-name = "Build debug APK"
-icon = "build"
-command = "flutter build apk --debug"
+name = "Android test APK assemble"
+icon = "flask"
+command = "cd android && gradlew.bat :app:assembleAndroidTest"
 
 [[actions]]
 name = "Install debug APK (all devices)"
