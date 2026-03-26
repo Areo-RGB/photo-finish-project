@@ -78,6 +78,9 @@ class SensorNativeController(
     @Volatile
     private var targetFpsUpper: Int? = null
 
+    @Volatile
+    private var gpsUpdatesStarted = false
+
     private var wasMonitoringBeforePause = false
     private var cameraProvider: ProcessCameraProvider? = null
     private var locationManager: LocationManager? = null
@@ -599,6 +602,9 @@ class SensorNativeController(
     }
 
     private fun startGpsUpdatesIfAvailable() {
+        if (gpsUpdatesStarted) {
+            return
+        }
         val locMgr = activity.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
         locationManager = locMgr
         if (locMgr == null) {
@@ -619,6 +625,7 @@ class SensorNativeController(
                 gpsLocationListener,
                 Looper.getMainLooper(),
             )
+            gpsUpdatesStarted = true
         } catch (error: SecurityException) {
             Log.w(TAG, "GPS updates unavailable: missing runtime permission.", error)
         } catch (error: IllegalArgumentException) {
@@ -635,6 +642,7 @@ class SensorNativeController(
         locationManager = null
         gpsUtcOffsetNanos = null
         gpsFixElapsedRealtimeNanos = null
+        gpsUpdatesStarted = false
     }
 
     private fun emitFrameStats(stats: NativeFrameStats, sensorMinusElapsedNanos: Long?) {

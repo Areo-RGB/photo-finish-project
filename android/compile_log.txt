@@ -1,0 +1,106 @@
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:processDebugMainManifest UP-TO-DATE
+> Task :app:processDebugManifest UP-TO-DATE
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :app:processDebugResources UP-TO-DATE
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :app:mergeDebugShaders UP-TO-DATE
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets UP-TO-DATE
+> Task :app:compressDebugAssets UP-TO-DATE
+> Task :app:desugarDebugFileDependencies UP-TO-DATE
+> Task :app:checkDebugDuplicateClasses UP-TO-DATE
+> Task :app:mergeExtDexDebug UP-TO-DATE
+> Task :app:mergeLibDexDebug UP-TO-DATE
+> Task :app:mergeDebugJniLibFolders UP-TO-DATE
+> Task :app:mergeDebugNativeLibs UP-TO-DATE
+> Task :app:stripDebugDebugSymbols UP-TO-DATE
+> Task :app:validateSigningDebug UP-TO-DATE
+> Task :app:writeDebugAppMetadata UP-TO-DATE
+> Task :app:writeDebugSigningConfigVersions UP-TO-DATE
+
+> Task :app:compileDebugKotlin FAILED
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:414:17 Unresolved reference 'OutlinedPrimaryButton'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:415:21 @Composable invocations can only happen from the context of a @Composable function
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:419:32 No value passed for parameter 'content'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:443:17 Unresolved reference 'OutlinedPrimaryButton'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:444:17 Unresolved reference 'OutlinedPrimaryButton'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:555:55 Argument type mismatch: actual type is 'Function0<String>', but 'String' was expected.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:555:92 Syntax error: Expecting ','.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:555:94 Syntax error: Expecting '"'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:556:17 Unresolved reference 'MetricDisplay'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:556:31 Unresolved reference 'label'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:556:31 Only expressions are allowed in this context.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:556:47 Syntax error: Expecting ')'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:556:49 Argument already passed for this parameter.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:556:104 Syntax error: Expecting ','.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:556:104 Mixing named and positional arguments is not allowed unless the order of the arguments matches the order of the parameters.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:556:106 Syntax error: Expecting '"'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:556:106 Syntax error: Expecting ')'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:579:17 Unresolved reference 'OutlinedPrimaryButton'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:716:60 Argument type mismatch: actual type is 'Function0<String>', but 'String' was expected.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:716:102 Syntax error: Expecting ','.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:716:104 Syntax error: Expecting '"'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:717:17 Unresolved reference 'Slider'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:718:21 Unresolved reference 'value'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:718:21 Only expressions are allowed in this context.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:718:56 Syntax error: Expecting ')'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:719:21 No parameter with name 'onValueChange' found.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:719:57 Unresolved reference 'it'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:720:21 No parameter with name 'valueRange' found.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:723:61 Argument type mismatch: actual type is 'Function0<String>', but 'String' was expected.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:723:104 Syntax error: Expecting ','.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:723:106 Syntax error: Expecting '"'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:724:17 Unresolved reference 'Slider'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:725:21 Unresolved reference 'value'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:725:21 Only expressions are allowed in this context.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:725:57 Syntax error: Expecting ')'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:726:21 No parameter with name 'onValueChange' found.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:726:57 Unresolved reference 'it'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:727:21 No parameter with name 'valueRange' found.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:730:60 Argument type mismatch: actual type is 'Function0<String>', but 'String' was expected.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:730:101 Syntax error: Expecting ','.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:730:103 Syntax error: Expecting '"'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:731:17 Unresolved reference 'Slider'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:732:21 Unresolved reference 'value'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:732:21 Only expressions are allowed in this context.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:732:55 Syntax error: Expecting ')'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:733:21 No parameter with name 'onValueChange' found.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:733:56 Unresolved reference 'it'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:734:21 No parameter with name 'valueRange' found.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:749:69 Argument type mismatch: actual type is 'Function0<Comparable<*> & Serializable>', but 'String' was expected.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:749:102 Syntax error: Expecting ','.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:749:104 Syntax error: Expecting '"'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:750:17 Unresolved reference 'Text'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:753:49 Syntax error: Expecting ','.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:754:17 Argument type mismatch: actual type is 'Unit', but 'String?' was expected.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:760:18 Syntax error: Expecting ')'.
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileDebugKotlin'.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+   > Compilation error. See log for more details
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 2s
+28 actionable tasks: 1 executed, 27 up-to-date

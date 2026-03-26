@@ -21,7 +21,7 @@ function fail(message, detail = '') {
   process.exit(1);
 }
 
-const appId = 'com.paul.sprintsync';
+const appId = 'sync.sprint';
 const apkCandidates = [
   resolve(process.cwd(), 'build', 'app', 'outputs', 'apk', 'release', 'app-release.apk'),
   resolve(process.cwd(), 'android', 'app', 'build', 'outputs', 'apk', 'release', 'app-release.apk'),

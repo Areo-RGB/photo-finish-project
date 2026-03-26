@@ -8,7 +8,7 @@ class SensorNativePreviewViewFactory(
 ) {
     fun createPreviewView(context: Context): PreviewView {
         val previewView = PreviewView(context).apply {
-            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+            implementationMode = PreviewView.ImplementationMode.PERFORMANCE
             scaleType = PreviewView.ScaleType.FILL_CENTER
         }
         sensorNativeController.attachPreviewSurface(previewView)

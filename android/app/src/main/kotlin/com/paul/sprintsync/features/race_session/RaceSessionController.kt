@@ -2,8 +2,6 @@ package com.paul.sprintsync.features.race_session
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.paul.sprintsync.chirp_sync.AcousticChirpSyncEngine
-import com.paul.sprintsync.chirp_sync.ChirpCalibrationResult
 import com.paul.sprintsync.core.clock.ClockDomain
 import com.paul.sprintsync.core.models.LastRunResult
 import com.paul.sprintsync.core.repositories.LocalRepository
@@ -20,13 +18,6 @@ import java.util.UUID
 typealias RaceSessionLoadLastRun = suspend () -> LastRunResult?
 typealias RaceSessionSaveLastRun = suspend (LastRunResult) -> Unit
 typealias RaceSessionSendMessage = (endpointId: String, messageJson: String, onComplete: (Result<Unit>) -> Unit) -> Unit
-typealias RaceSessionStartCalibration = (
-    calibrationId: String,
-    role: String,
-    profile: String,
-    sampleCount: Int,
-    remoteSendElapsedNanos: Long?,
-) -> ChirpCalibrationResult
 
 data class SessionRaceTimeline(
     val hostStartSensorNanos: Long? = null,
@@ -44,9 +35,6 @@ data class RaceSessionClockState(
     val hostGpsFixAgeNanos: Long? = null,
     val lastClockSyncElapsedNanos: Long? = null,
     val hostClockRoundTripNanos: Long? = null,
-    val chirpHostMinusClientElapsedNanos: Long? = null,
-    val chirpJitterNanos: Long? = null,
-    val lastChirpSyncElapsedNanos: Long? = null,
 )
 
 data class RaceSessionUiState(
@@ -60,18 +48,15 @@ data class RaceSessionUiState(
     val discoveredEndpoints: Map<String, String> = emptyMap(),
     val connectedEndpoints: Set<String> = emptySet(),
     val clockSyncInProgress: Boolean = false,
-    val chirpSyncInProgress: Boolean = false,
-    val activeCalibrationId: String? = null,
     val lastError: String? = null,
     val lastEvent: String? = null,
+    val isReconnectingToP2p: Boolean = false,
 )
 
 class RaceSessionController(
     private val loadLastRun: RaceSessionLoadLastRun,
     private val saveLastRun: RaceSessionSaveLastRun,
     private val sendMessage: RaceSessionSendMessage,
-    private val startCalibration: RaceSessionStartCalibration,
-    private val clearCalibration: () -> Unit,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val nowElapsedNanos: () -> Long = { ClockDomain.nowElapsedNanos() },
 ) : ViewModel() {
@@ -79,7 +64,6 @@ class RaceSessionController(
         private const val MAX_ACCEPTED_ROUND_TRIP_NANOS = 120_000_000L
         private const val DEFAULT_CLOCK_SYNC_SAMPLE_COUNT = 8
         private const val CLOCK_LOCK_VALIDITY_NANOS = 6_000_000_000L
-        private const val CHIRP_LOCK_VALIDITY_NANOS = 20_000_000_000L
         private const val GPS_LOCK_VALIDITY_NANOS = 10_000_000_000L
         private const val DEFAULT_LOCAL_DEVICE_ID = "local-device"
         private const val DEFAULT_LOCAL_DEVICE_NAME = "This Device"
@@ -88,7 +72,6 @@ class RaceSessionController(
     constructor(
         localRepository: LocalRepository,
         nearbyConnectionsManager: NearbyConnectionsManager,
-        chirpSyncEngine: AcousticChirpSyncEngine,
         ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
         nowElapsedNanos: () -> Long = { ClockDomain.nowElapsedNanos() },
     ) : this(
@@ -97,16 +80,6 @@ class RaceSessionController(
         sendMessage = { endpointId, messageJson, onComplete ->
             nearbyConnectionsManager.sendMessage(endpointId, messageJson, onComplete)
         },
-        startCalibration = { calibrationId, role, profile, sampleCount, remoteSendElapsedNanos ->
-            chirpSyncEngine.startCalibration(
-                calibrationId = calibrationId,
-                role = role,
-                profile = profile,
-                sampleCount = sampleCount,
-                remoteSendElapsedNanos = remoteSendElapsedNanos,
-            )
-        },
-        clearCalibration = { chirpSyncEngine.clear() },
         ioDispatcher = ioDispatcher,
         nowElapsedNanos = nowElapsedNanos,
     )
@@ -143,6 +116,20 @@ class RaceSessionController(
                 hostStopSensorNanos = null,
             )
             _uiState.value = _uiState.value.copy(timeline = persistedTimeline)
+        }
+
+        viewModelScope.launch(ioDispatcher) {
+            while (true) {
+                kotlinx.coroutines.delay(2000)
+                val state = _uiState.value
+                if (state.networkRole == SessionNetworkRole.CLIENT && 
+                    (state.stage == SessionStage.LOBBY || state.stage == SessionStage.MONITORING)) {
+                    val endpointId = state.connectedEndpoints.firstOrNull()
+                    if (endpointId != null && !state.clockSyncInProgress && !hasFreshClockLock(CLOCK_LOCK_VALIDITY_NANOS / 2)) {
+                        startClockSyncBurst(endpointId)
+                    }
+                }
+            }
         }
     }
 
@@ -189,9 +176,10 @@ class RaceSessionController(
             ),
             current = _uiState.value.devices,
         )
+        val initialStage = if (role == SessionNetworkRole.HOST) SessionStage.LOBBY else SessionStage.SETUP
         _uiState.value = _uiState.value.copy(
             networkRole = role,
-            stage = SessionStage.SETUP,
+            stage = initialStage,
             monitoringActive = false,
             runId = null,
             timeline = SessionRaceTimeline(),
@@ -199,6 +187,7 @@ class RaceSessionController(
             connectedEndpoints = emptySet(),
             deviceRole = localDeviceRole(),
             lastError = null,
+            isReconnectingToP2p = false,
         )
     }
 
@@ -229,9 +218,22 @@ class RaceSessionController(
             is NearbyEvent.EndpointDisconnected -> {
                 val nextConnected = _uiState.value.connectedEndpoints - event.endpointId
                 val nextDevices = _uiState.value.devices.filterNot { it.id == event.endpointId }
+                
+                var nextStage = _uiState.value.stage
+                var nextRole = _uiState.value.networkRole
+                
+                if (_uiState.value.networkRole == SessionNetworkRole.CLIENT && nextConnected.isEmpty()) {
+                    if (!_uiState.value.isReconnectingToP2p) {
+                        nextStage = SessionStage.SETUP
+                        nextRole = SessionNetworkRole.NONE
+                    }
+                }
+
                 _uiState.value = _uiState.value.copy(
                     connectedEndpoints = nextConnected,
                     devices = ensureLocalDevice(localDeviceFromState(), nextDevices),
+                    stage = nextStage,
+                    networkRole = nextRole,
                     lastEvent = "endpoint_disconnected",
                 )
                 if (_uiState.value.networkRole == SessionNetworkRole.HOST) {
@@ -300,17 +302,6 @@ class RaceSessionController(
             }
         }
         _uiState.value = _uiState.value.copy(devices = nextDevices)
-        if (_uiState.value.networkRole == SessionNetworkRole.HOST) {
-            broadcastSnapshotIfHost()
-        }
-    }
-
-    fun goToLobby() {
-        if (!canGoToLobby()) {
-            _uiState.value = _uiState.value.copy(lastError = "Need at least 2 devices")
-            return
-        }
-        _uiState.value = _uiState.value.copy(stage = SessionStage.LOBBY, lastError = null)
         if (_uiState.value.networkRole == SessionNetworkRole.HOST) {
             broadcastSnapshotIfHost()
         }
@@ -422,10 +413,6 @@ class RaceSessionController(
         }
     }
 
-    fun canGoToLobby(): Boolean {
-        return totalDeviceCount() >= 2
-    }
-
     fun totalDeviceCount(): Int {
         return _uiState.value.devices.size
     }
@@ -454,6 +441,15 @@ class RaceSessionController(
         return localDeviceFromState().highSpeedEnabled
     }
 
+    fun broadcastSwitchToP2p() {
+        val msg = SessionSwitchToP2pMessage(nowElapsedNanos()).toJsonString()
+        broadcastToConnected(msg)
+    }
+
+    fun setReconnectingToP2p(reconnecting: Boolean) {
+        _uiState.value = _uiState.value.copy(isReconnectingToP2p = reconnecting)
+    }
+
     fun startClockSyncBurst(endpointId: String, sampleCount: Int = DEFAULT_CLOCK_SYNC_SAMPLE_COUNT) {
         if (!_uiState.value.connectedEndpoints.contains(endpointId)) {
             _uiState.value = _uiState.value.copy(lastError = "Clock sync ignored: endpoint not connected")
@@ -478,114 +474,6 @@ class RaceSessionController(
                     )
                 }
             }
-        }
-    }
-
-    fun startChirpSync(
-        endpointId: String,
-        profile: String = AcousticChirpSyncEngine.PROFILE_NEAR_ULTRASOUND,
-        sampleCount: Int = 5,
-    ) {
-        if (!_uiState.value.connectedEndpoints.contains(endpointId)) {
-            _uiState.value = _uiState.value.copy(lastError = "Chirp sync ignored: endpoint not connected")
-            return
-        }
-
-        val calibrationId = UUID.randomUUID().toString()
-        _uiState.value = _uiState.value.copy(
-            chirpSyncInProgress = true,
-            activeCalibrationId = calibrationId,
-            lastError = null,
-        )
-
-        val remoteSendElapsedNanos = nowElapsedNanos()
-        val startMessage = SessionChirpCalibrationStartMessage(
-            calibrationId = calibrationId,
-            role = "responder",
-            profile = profile,
-            sampleCount = sampleCount,
-            remoteSendElapsedNanos = remoteSendElapsedNanos,
-        ).toJsonString()
-        sendMessage(endpointId, startMessage) { result ->
-            result.exceptionOrNull()?.let { error ->
-                _uiState.value = _uiState.value.copy(
-                    chirpSyncInProgress = false,
-                    activeCalibrationId = null,
-                    lastError = "Failed to start chirp sync: ${error.localizedMessage ?: "unknown"}",
-                )
-            }
-        }
-
-        startCalibration(
-            calibrationId,
-            "initiator",
-            profile,
-            sampleCount,
-            null,
-        )
-    }
-
-    fun startChirpSyncAllConnected(
-        profile: String = AcousticChirpSyncEngine.PROFILE_NEAR_ULTRASOUND,
-        sampleCount: Int = 5,
-    ) {
-        if (_uiState.value.networkRole != SessionNetworkRole.HOST) {
-            _uiState.value = _uiState.value.copy(lastError = "Chirp sync ignored: only host can broadcast start")
-            return
-        }
-        val targetEndpoints = _uiState.value.connectedEndpoints.toList()
-        if (targetEndpoints.isEmpty()) {
-            _uiState.value = _uiState.value.copy(lastError = "Chirp sync ignored: no connected endpoints")
-            return
-        }
-
-        val calibrationId = UUID.randomUUID().toString()
-        _uiState.value = _uiState.value.copy(
-            chirpSyncInProgress = true,
-            activeCalibrationId = calibrationId,
-            lastError = null,
-        )
-
-        val remoteSendElapsedNanos = nowElapsedNanos()
-        val startMessage = SessionChirpCalibrationStartMessage(
-            calibrationId = calibrationId,
-            role = "responder",
-            profile = profile,
-            sampleCount = sampleCount,
-            remoteSendElapsedNanos = remoteSendElapsedNanos,
-        ).toJsonString()
-        targetEndpoints.forEach { endpointId ->
-            sendMessage(endpointId, startMessage) { result ->
-                result.exceptionOrNull()?.let { error ->
-                    _uiState.value = _uiState.value.copy(
-                        lastError = "Failed to start chirp sync on $endpointId: ${error.localizedMessage ?: "unknown"}",
-                    )
-                }
-            }
-        }
-
-        startCalibration(
-            calibrationId,
-            "initiator",
-            profile,
-            sampleCount,
-            null,
-        )
-    }
-
-    fun clearChirpLock(broadcast: Boolean = false) {
-        clearCalibration()
-        updateClockState(
-            chirpHostMinusClientElapsedNanos = null,
-            chirpJitterNanos = null,
-            lastChirpSyncElapsedNanos = null,
-        )
-        _uiState.value = _uiState.value.copy(
-            chirpSyncInProgress = false,
-            activeCalibrationId = null,
-        )
-        if (broadcast) {
-            broadcastToConnected(SessionChirpClearMessage(calibrationId = null).toJsonString())
         }
     }
 
@@ -626,10 +514,9 @@ class RaceSessionController(
         hostGpsFixAgeNanos: Long? = _clockState.value.hostGpsFixAgeNanos,
         lastClockSyncElapsedNanos: Long? = _clockState.value.lastClockSyncElapsedNanos,
         hostClockRoundTripNanos: Long? = _clockState.value.hostClockRoundTripNanos,
-        chirpHostMinusClientElapsedNanos: Long? = _clockState.value.chirpHostMinusClientElapsedNanos,
-        chirpJitterNanos: Long? = _clockState.value.chirpJitterNanos,
-        lastChirpSyncElapsedNanos: Long? = _clockState.value.lastChirpSyncElapsedNanos,
     ) {
+        val previousHostOffset = _clockState.value.hostSensorMinusElapsedNanos
+
         _clockState.value = RaceSessionClockState(
             hostMinusClientElapsedNanos = hostMinusClientElapsedNanos,
             hostSensorMinusElapsedNanos = hostSensorMinusElapsedNanos,
@@ -640,10 +527,20 @@ class RaceSessionController(
             hostGpsFixAgeNanos = hostGpsFixAgeNanos,
             lastClockSyncElapsedNanos = lastClockSyncElapsedNanos,
             hostClockRoundTripNanos = hostClockRoundTripNanos,
-            chirpHostMinusClientElapsedNanos = chirpHostMinusClientElapsedNanos,
-            chirpJitterNanos = chirpJitterNanos,
-            lastChirpSyncElapsedNanos = lastChirpSyncElapsedNanos,
         )
+
+        // If we are the host and our camera just booted or heavily drifted/restarted, inform clients so they can map.
+        if (_uiState.value.networkRole == SessionNetworkRole.HOST) {
+            val oldVal = previousHostOffset ?: 0L
+            val newVal = hostSensorMinusElapsedNanos ?: 0L
+            if (previousHostOffset == null && hostSensorMinusElapsedNanos != null) {
+                broadcastSnapshotIfHost()
+            } else if (previousHostOffset != null && hostSensorMinusElapsedNanos != null) {
+                if (kotlin.math.abs(newVal - oldVal) > 50_000_000L) {
+                    broadcastSnapshotIfHost()
+                }
+            }
+        }
     }
 
     fun mapClientSensorToHostSensor(clientSensorNanos: Long): Long? {
@@ -699,11 +596,6 @@ class RaceSessionController(
         return nowElapsedNanos() - lockAt <= maxAgeNanos
     }
 
-    fun hasFreshChirpLock(maxAgeNanos: Long = CHIRP_LOCK_VALIDITY_NANOS): Boolean {
-        val lockAt = _clockState.value.lastChirpSyncElapsedNanos ?: return false
-        return nowElapsedNanos() - lockAt <= maxAgeNanos
-    }
-
     fun hasFreshGpsLock(maxAgeNanos: Long = GPS_LOCK_VALIDITY_NANOS): Boolean {
         val state = _clockState.value
         if (state.localSensorMinusElapsedNanos == null || state.hostSensorMinusElapsedNanos == null) {
@@ -724,7 +616,7 @@ class RaceSessionController(
     }
 
     fun hasFreshAnyClockLock(): Boolean {
-        return hasFreshGpsLock() || hasFreshChirpLock() || hasFreshClockLock()
+        return hasFreshGpsLock() || hasFreshClockLock()
     }
 
     private fun gpsHostMinusClientElapsedNanosIfFresh(): Long? {
@@ -737,20 +629,17 @@ class RaceSessionController(
         return localGpsUtcOffsetNanos - hostGpsUtcOffsetNanos
     }
 
-    private fun chirpHostMinusClientElapsedNanosIfFresh(): Long? {
-        if (!hasFreshChirpLock()) {
-            return null
-        }
-        return _clockState.value.chirpHostMinusClientElapsedNanos
-    }
-
     private fun currentHostMinusClientElapsedNanos(): Long? {
         return gpsHostMinusClientElapsedNanosIfFresh()
-            ?: chirpHostMinusClientElapsedNanosIfFresh()
             ?: _clockState.value.hostMinusClientElapsedNanos
     }
 
     private fun handleIncomingPayload(endpointId: String, rawMessage: String) {
+        SessionSwitchToP2pMessage.tryParse(rawMessage)?.let {
+            _uiState.value = _uiState.value.copy(isReconnectingToP2p = true, lastEvent = "switch_to_p2p")
+            return
+        }
+
         SessionClockSyncRequestMessage.tryParse(rawMessage)?.let { request ->
             handleIncomingClockSyncRequest(endpointId, request)
             return
@@ -773,7 +662,12 @@ class RaceSessionController(
 
         SessionTriggerMessage.tryParse(rawMessage)?.let { trigger ->
             val triggerSensorNanos = if (_uiState.value.networkRole == SessionNetworkRole.CLIENT) {
-                mapHostSensorToLocalSensor(trigger.triggerSensorNanos) ?: trigger.triggerSensorNanos
+                val mapped = mapHostSensorToLocalSensor(trigger.triggerSensorNanos)
+                if (mapped == null) {
+                    _uiState.value = _uiState.value.copy(lastEvent = "trigger_dropped_unsynced")
+                    return
+                }
+                mapped
             } else {
                 trigger.triggerSensorNanos
             }
@@ -788,21 +682,6 @@ class RaceSessionController(
 
         SessionTimelineSnapshotMessage.tryParse(rawMessage)?.let { snapshot ->
             ingestTimelineSnapshot(snapshot)
-            return
-        }
-
-        SessionChirpCalibrationStartMessage.tryParse(rawMessage)?.let { message ->
-            handleIncomingChirpStart(endpointId, message)
-            return
-        }
-
-        SessionChirpCalibrationResultMessage.tryParse(rawMessage)?.let { result ->
-            applyChirpResult(result)
-            return
-        }
-
-        SessionChirpClearMessage.tryParse(rawMessage)?.let {
-            clearChirpLock(broadcast = false)
             return
         }
     }
@@ -933,6 +812,7 @@ class RaceSessionController(
             timeline = timeline,
             lastEvent = "snapshot_applied",
             lastError = null,
+            isReconnectingToP2p = false,
         )
 
         maybePersistCompletedRun(timeline)
@@ -947,12 +827,10 @@ class RaceSessionController(
             maybeFinishClockSyncBurst()
             return
         }
-        val offset = AcousticChirpSyncEngine.computeOffsetFromFourTimestamps(
-            clientSendElapsedNanos = response.clientSendElapsedNanos,
-            hostReceiveElapsedNanos = response.hostReceiveElapsedNanos,
-            hostSendElapsedNanos = response.hostSendElapsedNanos,
-            clientReceiveElapsedNanos = receiveElapsedNanos,
-        )
+        val offset = (
+            (response.hostReceiveElapsedNanos - response.clientSendElapsedNanos) +
+            (response.hostSendElapsedNanos - receiveElapsedNanos)
+        ) / 2L
         acceptedClockOffsetSamples += offset
         acceptedClockRoundTripSamples += roundTripNanos
         maybeFinishClockSyncBurst()
@@ -962,8 +840,8 @@ class RaceSessionController(
         if (pendingClockSyncSamplesByClientSendNanos.isNotEmpty()) {
             return
         }
-        val offset = AcousticChirpSyncEngine.medianNanos(acceptedClockOffsetSamples)
-        val roundTrip = AcousticChirpSyncEngine.medianNanos(acceptedClockRoundTripSamples)
+        val offset = medianNanos(acceptedClockOffsetSamples)
+        val roundTrip = medianNanos(acceptedClockRoundTripSamples)
         if (offset != null && roundTrip != null) {
             updateClockState(
                 hostMinusClientElapsedNanos = offset,
@@ -981,58 +859,33 @@ class RaceSessionController(
         acceptedClockRoundTripSamples.clear()
     }
 
-    private fun handleIncomingChirpStart(
-        endpointId: String,
-        message: SessionChirpCalibrationStartMessage,
-    ) {
-        val result = startCalibration(
-            message.calibrationId,
-            message.role,
-            message.profile,
-            message.sampleCount,
-            message.remoteSendElapsedNanos,
-        )
-        val response = result.toWireMessage().toJsonString()
-        sendMessage(endpointId, response) { sendResult ->
-            sendResult.exceptionOrNull()?.let { error ->
-                _uiState.value = _uiState.value.copy(
-                    lastError = "Failed sending chirp result: ${error.localizedMessage ?: "unknown"}",
-                )
-            }
-        }
-    }
-
-    private fun applyChirpResult(result: SessionChirpCalibrationResultMessage) {
-        if (result.accepted && result.hostMinusClientElapsedNanos != null) {
-            updateClockState(
-                hostMinusClientElapsedNanos = result.hostMinusClientElapsedNanos,
-                chirpHostMinusClientElapsedNanos = result.hostMinusClientElapsedNanos,
-                chirpJitterNanos = result.jitterNanos,
-                lastChirpSyncElapsedNanos = result.completedAtElapsedNanos ?: nowElapsedNanos(),
-            )
-            _uiState.value = _uiState.value.copy(
-                chirpSyncInProgress = false,
-                activeCalibrationId = null,
-                lastEvent = "chirp_sync_complete",
-                lastError = null,
-            )
-            return
-        }
-        _uiState.value = _uiState.value.copy(
-            chirpSyncInProgress = false,
-            activeCalibrationId = null,
-            lastError = result.reason ?: "Chirp calibration rejected",
-        )
-    }
-
     private fun ingestTimelineSnapshot(snapshot: SessionTimelineSnapshotMessage) {
         val localTimeline = if (_uiState.value.networkRole == SessionNetworkRole.CLIENT) {
+            val localStart = snapshot.hostStartSensorNanos?.let { hostStart ->
+                mapHostSensorToLocalSensor(hostStart)
+            }
+            if (snapshot.hostStartSensorNanos != null && localStart == null) {
+                _uiState.value = _uiState.value.copy(lastEvent = "timeline_snapshot_dropped_unsynced")
+                return
+            }
+            val localSplits = snapshot.hostSplitSensorNanos.map { hostSplit ->
+                mapHostSensorToLocalSensor(hostSplit)
+            }
+            if (localSplits.any { it == null }) {
+                _uiState.value = _uiState.value.copy(lastEvent = "timeline_snapshot_dropped_unsynced")
+                return
+            }
+            val localStop = snapshot.hostStopSensorNanos?.let { hostStop ->
+                mapHostSensorToLocalSensor(hostStop)
+            }
+            if (snapshot.hostStopSensorNanos != null && localStop == null) {
+                _uiState.value = _uiState.value.copy(lastEvent = "timeline_snapshot_dropped_unsynced")
+                return
+            }
             SessionRaceTimeline(
-                hostStartSensorNanos = snapshot.hostStartSensorNanos?.let { mapHostSensorToLocalSensor(it) ?: it },
-                hostSplitSensorNanos = snapshot.hostSplitSensorNanos.map { hostSplit ->
-                    mapHostSensorToLocalSensor(hostSplit) ?: hostSplit
-                },
-                hostStopSensorNanos = snapshot.hostStopSensorNanos?.let { mapHostSensorToLocalSensor(it) ?: it },
+                hostStartSensorNanos = localStart,
+                hostSplitSensorNanos = localSplits.mapNotNull { it },
+                hostStopSensorNanos = localStop,
             )
         } else {
             SessionRaceTimeline(
@@ -1197,16 +1050,16 @@ class RaceSessionController(
         return map { elapsed -> startedSensorNanos + elapsed.coerceAtLeast(0L) }
     }
 
-    private fun ChirpCalibrationResult.toWireMessage(): SessionChirpCalibrationResultMessage {
-        return SessionChirpCalibrationResultMessage(
-            calibrationId = calibrationId,
-            accepted = accepted,
-            hostMinusClientElapsedNanos = hostMinusClientElapsedNanos,
-            jitterNanos = jitterNanos,
-            reason = reason,
-            completedAtElapsedNanos = completedAtElapsedNanos,
-            profile = profile,
-            sampleCount = sampleCount,
-        )
+    private fun medianNanos(samples: List<Long>): Long? {
+        if (samples.isEmpty()) {
+            return null
+        }
+        val sorted = samples.sorted()
+        val mid = sorted.size / 2
+        return if (sorted.size % 2 == 0) {
+            (sorted[mid - 1] + sorted[mid]) / 2L
+        } else {
+            sorted[mid]
+        }
     }
 }

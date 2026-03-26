@@ -13,6 +13,7 @@ class MainActivityMonitoringLogicTest {
             isAppResumed = true,
             shouldRunLocalCapture = true,
             isLocalMotionMonitoring = false,
+            localCaptureStartPending = false,
         )
 
         assertEquals(LocalCaptureAction.START, action)
@@ -25,6 +26,7 @@ class MainActivityMonitoringLogicTest {
             isAppResumed = false,
             shouldRunLocalCapture = true,
             isLocalMotionMonitoring = true,
+            localCaptureStartPending = false,
         )
 
         assertEquals(LocalCaptureAction.STOP, action)
@@ -37,6 +39,7 @@ class MainActivityMonitoringLogicTest {
             isAppResumed = true,
             shouldRunLocalCapture = false,
             isLocalMotionMonitoring = true,
+            localCaptureStartPending = false,
         )
 
         assertEquals(LocalCaptureAction.STOP, action)
@@ -49,6 +52,7 @@ class MainActivityMonitoringLogicTest {
             isAppResumed = true,
             shouldRunLocalCapture = true,
             isLocalMotionMonitoring = true,
+            localCaptureStartPending = false,
         )
 
         assertEquals(LocalCaptureAction.NONE, action)
@@ -77,5 +81,18 @@ class MainActivityMonitoringLogicTest {
                 hasStopSensor = true,
             ),
         )
+    }
+
+    @Test
+    fun `does not start capture again while start is pending`() {
+        val action = resolveLocalCaptureAction(
+            monitoringActive = true,
+            isAppResumed = true,
+            shouldRunLocalCapture = true,
+            isLocalMotionMonitoring = false,
+            localCaptureStartPending = true,
+        )
+
+        assertEquals(LocalCaptureAction.NONE, action)
     }
 }

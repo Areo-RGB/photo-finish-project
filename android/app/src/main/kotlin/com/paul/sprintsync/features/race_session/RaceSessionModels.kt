@@ -87,20 +87,20 @@ data class SessionSnapshotMessage(
         val splitArray = JSONArray()
         hostSplitSensorNanos.forEach { splitArray.put(it) }
         val timeline = JSONObject()
-            .put("hostStartSensorNanos", hostStartSensorNanos)
+            .put("hostStartSensorNanos", hostStartSensorNanos ?: JSONObject.NULL)
             .put("hostSplitSensorNanos", splitArray)
-            .put("hostStopSensorNanos", hostStopSensorNanos)
+            .put("hostStopSensorNanos", hostStopSensorNanos ?: JSONObject.NULL)
         return JSONObject()
             .put("type", TYPE)
             .put("stage", stage.name.lowercase())
             .put("monitoringActive", monitoringActive)
             .put("devices", devicesArray)
             .put("timeline", timeline)
-            .put("runId", runId)
-            .put("hostSensorMinusElapsedNanos", hostSensorMinusElapsedNanos)
-            .put("hostGpsUtcOffsetNanos", hostGpsUtcOffsetNanos)
-            .put("hostGpsFixAgeNanos", hostGpsFixAgeNanos)
-            .put("selfDeviceId", selfDeviceId)
+            .put("runId", runId ?: JSONObject.NULL)
+            .put("hostSensorMinusElapsedNanos", hostSensorMinusElapsedNanos ?: JSONObject.NULL)
+            .put("hostGpsUtcOffsetNanos", hostGpsUtcOffsetNanos ?: JSONObject.NULL)
+            .put("hostGpsFixAgeNanos", hostGpsFixAgeNanos ?: JSONObject.NULL)
+            .put("selfDeviceId", selfDeviceId ?: JSONObject.NULL)
             .toString()
     }
 
@@ -163,7 +163,7 @@ data class SessionTriggerRequestMessage(
             .put("type", TYPE)
             .put("role", role.name.lowercase())
             .put("triggerSensorNanos", triggerSensorNanos)
-            .put("mappedHostSensorNanos", mappedHostSensorNanos)
+            .put("mappedHostSensorNanos", mappedHostSensorNanos ?: JSONObject.NULL)
             .toString()
     }
 
@@ -328,9 +328,9 @@ data class SessionTimelineSnapshotMessage(
         hostSplitSensorNanos.forEach { splits.put(it) }
         return JSONObject()
             .put("type", TYPE)
-            .put("hostStartSensorNanos", hostStartSensorNanos)
+            .put("hostStartSensorNanos", hostStartSensorNanos ?: JSONObject.NULL)
             .put("hostSplitSensorNanos", splits)
-            .put("hostStopSensorNanos", hostStopSensorNanos)
+            .put("hostStopSensorNanos", hostStopSensorNanos ?: JSONObject.NULL)
             .put("sentElapsedNanos", sentElapsedNanos)
             .toString()
     }
@@ -412,28 +412,18 @@ data class SessionTriggerMessage(
     }
 }
 
-data class SessionChirpCalibrationStartMessage(
-    val calibrationId: String,
-    val role: String,
-    val profile: String,
-    val sampleCount: Int,
-    val remoteSendElapsedNanos: Long?,
-) {
+data class SessionSwitchToP2pMessage(val timestampNanos: Long) {
     fun toJsonString(): String {
         return JSONObject()
             .put("type", TYPE)
-            .put("calibrationId", calibrationId)
-            .put("role", role)
-            .put("profile", profile)
-            .put("sampleCount", sampleCount)
-            .put("remoteSendElapsedNanos", remoteSendElapsedNanos)
+            .put("timestampNanos", timestampNanos)
             .toString()
     }
 
     companion object {
-        const val TYPE = "chirp_calibration_start"
+        const val TYPE = "switch_to_p2p"
 
-        fun tryParse(raw: String): SessionChirpCalibrationStartMessage? {
+        fun tryParse(raw: String): SessionSwitchToP2pMessage? {
             val decoded = try {
                 JSONObject(raw)
             } catch (_: JSONException) {
@@ -442,110 +432,9 @@ data class SessionChirpCalibrationStartMessage(
             if (decoded.optString("type") != TYPE) {
                 return null
             }
-            val calibrationId = decoded.optString("calibrationId", "").trim()
-            val role = decoded.optString("role", "").trim()
-            val profile = decoded.optString("profile", "").trim()
-            val sampleCount = decoded.optInt("sampleCount", 3)
-            if (calibrationId.isEmpty() || role.isEmpty() || profile.isEmpty()) {
-                return null
-            }
-            val remoteSendElapsedNanos = decoded.readOptionalLong("remoteSendElapsedNanos")
-            return SessionChirpCalibrationStartMessage(
-                calibrationId = calibrationId,
-                role = role,
-                profile = profile,
-                sampleCount = sampleCount.coerceAtLeast(3),
-                remoteSendElapsedNanos = remoteSendElapsedNanos,
+            return SessionSwitchToP2pMessage(
+                timestampNanos = decoded.optLong("timestampNanos", 0L)
             )
-        }
-    }
-}
-
-data class SessionChirpCalibrationResultMessage(
-    val calibrationId: String,
-    val accepted: Boolean,
-    val hostMinusClientElapsedNanos: Long?,
-    val jitterNanos: Long?,
-    val reason: String?,
-    val completedAtElapsedNanos: Long?,
-    val profile: String,
-    val sampleCount: Int,
-) {
-    fun toJsonString(): String {
-        return JSONObject()
-            .put("type", TYPE)
-            .put("calibrationId", calibrationId)
-            .put("accepted", accepted)
-            .put("hostMinusClientElapsedNanos", hostMinusClientElapsedNanos)
-            .put("jitterNanos", jitterNanos)
-            .put("reason", reason)
-            .put("completedAtElapsedNanos", completedAtElapsedNanos)
-            .put("profile", profile)
-            .put("sampleCount", sampleCount)
-            .toString()
-    }
-
-    companion object {
-        const val TYPE = "chirp_calibration_result"
-
-        fun tryParse(raw: String): SessionChirpCalibrationResultMessage? {
-            val decoded = try {
-                JSONObject(raw)
-            } catch (_: JSONException) {
-                return null
-            }
-            if (decoded.optString("type") != TYPE) {
-                return null
-            }
-            val calibrationId = decoded.optString("calibrationId", "").trim()
-            val accepted = decoded.optBoolean("accepted", false)
-            val profile = decoded.optString("profile", "").trim()
-            val sampleCount = decoded.optInt("sampleCount", 0)
-            if (calibrationId.isEmpty() || profile.isEmpty() || sampleCount <= 0) {
-                return null
-            }
-            val hostMinusClientElapsedNanos = decoded.readOptionalLong("hostMinusClientElapsedNanos")
-            val jitterNanos = decoded.readOptionalLong("jitterNanos")
-            val completedAtElapsedNanos = decoded.readOptionalLong("completedAtElapsedNanos")
-            val reason = decoded.optString("reason", "").ifBlank { null }
-            return SessionChirpCalibrationResultMessage(
-                calibrationId = calibrationId,
-                accepted = accepted,
-                hostMinusClientElapsedNanos = hostMinusClientElapsedNanos,
-                jitterNanos = jitterNanos,
-                reason = reason,
-                completedAtElapsedNanos = completedAtElapsedNanos,
-                profile = profile,
-                sampleCount = sampleCount,
-            )
-        }
-    }
-}
-
-data class SessionChirpClearMessage(
-    val calibrationId: String?,
-) {
-    fun toJsonString(): String {
-        return JSONObject()
-            .put("type", TYPE)
-            .put("calibrationId", calibrationId)
-            .toString()
-    }
-
-    companion object {
-        const val TYPE = "chirp_clear"
-
-        fun tryParse(raw: String): SessionChirpClearMessage? {
-            val decoded = try {
-                JSONObject(raw)
-            } catch (_: JSONException) {
-                return null
-            }
-            if (decoded.optString("type") != TYPE) {
-                return null
-            }
-            val calibrationId = decoded.optString("calibrationId", "").ifBlank { null }
-            return SessionChirpClearMessage(calibrationId = calibrationId)
         }
     }
 }

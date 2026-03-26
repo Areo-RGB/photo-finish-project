@@ -8,6 +8,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -29,7 +30,7 @@ class RaceSessionControllerTest {
                 sentMessages += messageJson
                 onComplete(Result.success(Unit))
             },
-            startCalibration = { calibrationId, _, profile, sampleCount, _ ->
+            startCalibration = { calibrationId, _, profile, sampleCount, _, _ ->
                 ChirpCalibrationResult(
                     calibrationId = calibrationId,
                     accepted = true,
@@ -89,7 +90,7 @@ class RaceSessionControllerTest {
             loadLastRun = { null },
             saveLastRun = { },
             sendMessage = { _, _, onComplete -> onComplete(Result.success(Unit)) },
-            startCalibration = { calibrationId, _, profile, sampleCount, _ ->
+            startCalibration = { calibrationId, _, profile, sampleCount, _, _ ->
                 ChirpCalibrationResult(calibrationId, true, null, null, null, null, profile, sampleCount)
             },
             clearCalibration = { },
@@ -115,7 +116,7 @@ class RaceSessionControllerTest {
                 savedRunSplits = run.splitElapsedNanos
             },
             sendMessage = { _, _, onComplete -> onComplete(Result.success(Unit)) },
-            startCalibration = { calibrationId, _, profile, sampleCount, _ ->
+            startCalibration = { calibrationId, _, profile, sampleCount, _, _ ->
                 ChirpCalibrationResult(calibrationId, true, null, null, null, null, profile, sampleCount)
             },
             clearCalibration = { },
@@ -138,7 +139,7 @@ class RaceSessionControllerTest {
             loadLastRun = { null },
             saveLastRun = { },
             sendMessage = { _, _, onComplete -> onComplete(Result.success(Unit)) },
-            startCalibration = { calibrationId, _, profile, sampleCount, _ ->
+            startCalibration = { calibrationId, _, profile, sampleCount, _, _ ->
                 ChirpCalibrationResult(calibrationId, true, null, null, null, null, profile, sampleCount)
             },
             clearCalibration = { },
@@ -177,7 +178,7 @@ class RaceSessionControllerTest {
             loadLastRun = { null },
             saveLastRun = { },
             sendMessage = { _, _, onComplete -> onComplete(Result.success(Unit)) },
-            startCalibration = { calibrationId, _, profile, sampleCount, _ ->
+            startCalibration = { calibrationId, _, profile, sampleCount, _, _ ->
                 ChirpCalibrationResult(calibrationId, true, null, null, null, null, profile, sampleCount)
             },
             clearCalibration = { },
@@ -216,7 +217,7 @@ class RaceSessionControllerTest {
             loadLastRun = { null },
             saveLastRun = { },
             sendMessage = { _, _, onComplete -> onComplete(Result.success(Unit)) },
-            startCalibration = { calibrationId, _, profile, sampleCount, _ ->
+            startCalibration = { calibrationId, _, profile, sampleCount, _, _ ->
                 ChirpCalibrationResult(calibrationId, true, null, null, null, null, profile, sampleCount)
             },
             clearCalibration = { },
@@ -246,7 +247,7 @@ class RaceSessionControllerTest {
             loadLastRun = { null },
             saveLastRun = { },
             sendMessage = { _, _, onComplete -> onComplete(Result.success(Unit)) },
-            startCalibration = { calibrationId, _, profile, sampleCount, _ ->
+            startCalibration = { calibrationId, _, profile, sampleCount, _, _ ->
                 ChirpCalibrationResult(calibrationId, true, null, null, null, null, profile, sampleCount)
             },
             clearCalibration = { },
@@ -278,6 +279,71 @@ class RaceSessionControllerTest {
     }
 
     @Test
+    fun `client drops trigger update when sync mapping is unavailable`() = runTest {
+        val controller = RaceSessionController(
+            loadLastRun = { null },
+            saveLastRun = { },
+            sendMessage = { _, _, onComplete -> onComplete(Result.success(Unit)) },
+            startCalibration = { calibrationId, _, profile, sampleCount, _, _ ->
+                ChirpCalibrationResult(calibrationId, true, null, null, null, null, profile, sampleCount)
+            },
+            clearCalibration = { },
+            ioDispatcher = StandardTestDispatcher(testScheduler),
+            nowElapsedNanos = { 1L },
+        )
+
+        controller.setNetworkRole(SessionNetworkRole.CLIENT)
+        val raw = SessionTriggerMessage(
+            triggerType = "start",
+            splitIndex = 0,
+            triggerSensorNanos = 2_000L,
+        ).toJsonString()
+        controller.onNearbyEvent(
+            NearbyEvent.PayloadReceived(
+                endpointId = "host-1",
+                message = raw,
+            ),
+        )
+
+        assertNull(controller.uiState.value.timeline.hostStartSensorNanos)
+        assertEquals("trigger_dropped_unsynced", controller.uiState.value.lastEvent)
+    }
+
+    @Test
+    fun `client drops timeline snapshot when sync mapping is unavailable`() = runTest {
+        val controller = RaceSessionController(
+            loadLastRun = { null },
+            saveLastRun = { },
+            sendMessage = { _, _, onComplete -> onComplete(Result.success(Unit)) },
+            startCalibration = { calibrationId, _, profile, sampleCount, _, _ ->
+                ChirpCalibrationResult(calibrationId, true, null, null, null, null, profile, sampleCount)
+            },
+            clearCalibration = { },
+            ioDispatcher = StandardTestDispatcher(testScheduler),
+            nowElapsedNanos = { 1L },
+        )
+
+        controller.setNetworkRole(SessionNetworkRole.CLIENT)
+        val raw = SessionTimelineSnapshotMessage(
+            hostStartSensorNanos = 1_000L,
+            hostSplitSensorNanos = listOf(1_500L),
+            hostStopSensorNanos = 2_000L,
+            sentElapsedNanos = 2L,
+        ).toJsonString()
+        controller.onNearbyEvent(
+            NearbyEvent.PayloadReceived(
+                endpointId = "host-1",
+                message = raw,
+            ),
+        )
+
+        assertNull(controller.uiState.value.timeline.hostStartSensorNanos)
+        assertTrue(controller.uiState.value.timeline.hostSplitSensorNanos.isEmpty())
+        assertNull(controller.uiState.value.timeline.hostStopSensorNanos)
+        assertEquals("timeline_snapshot_dropped_unsynced", controller.uiState.value.lastEvent)
+    }
+
+    @Test
     fun `host chirp start broadcasts to all connected endpoints`() = runTest {
         val sentMessages = mutableListOf<Pair<String, String>>()
         var startedCalibrationId: String? = null
@@ -292,7 +358,7 @@ class RaceSessionControllerTest {
                 sentMessages += endpointId to messageJson
                 onComplete(Result.success(Unit))
             },
-            startCalibration = { calibrationId, role, profile, sampleCount, _ ->
+            startCalibration = { calibrationId, role, profile, sampleCount, _, _ ->
                 startedCalibrationId = calibrationId
                 startedRole = role
                 startedProfile = profile
@@ -360,7 +426,7 @@ class RaceSessionControllerTest {
             loadLastRun = { null },
             saveLastRun = { },
             sendMessage = { _, _, onComplete -> onComplete(Result.success(Unit)) },
-            startCalibration = { calibrationId, _, profile, sampleCount, _ ->
+            startCalibration = { calibrationId, _, profile, sampleCount, _, _ ->
                 ChirpCalibrationResult(calibrationId, true, null, null, null, null, profile, sampleCount)
             },
             clearCalibration = { },

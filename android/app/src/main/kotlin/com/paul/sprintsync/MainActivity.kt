@@ -12,7 +12,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import com.paul.sprintsync.chirp_sync.AcousticChirpSyncEngine
 import com.paul.sprintsync.core.repositories.LocalRepository
 import com.paul.sprintsync.core.services.NearbyEvent
 import com.paul.sprintsync.core.services.NearbyConnectionsManager
@@ -36,7 +35,7 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsResultCallback {
     companion object {
-        private const val DEFAULT_SERVICE_ID = "com.paul.sprintsync.nearby"
+        private const val DEFAULT_SERVICE_ID = "sync.sprint.nearby"
         private const val PERMISSIONS_REQUEST_CODE = 7301
         private const val SENSOR_ELAPSED_PROJECTION_MAX_AGE_NANOS = 3_000_000_000L
         private const val TIMER_REFRESH_INTERVAL_MS = 100L
@@ -58,7 +57,6 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
         super.onCreate(savedInstanceState)
         sensorNativeController = SensorNativeController(this)
         val localRepository = LocalRepository(this)
-        val chirpSyncEngine = AcousticChirpSyncEngine(this)
         nearbyConnectionsManager = NearbyConnectionsManager(
             context = this,
             nowNativeClockSyncElapsedNanos = { requireSensorDomain ->
@@ -76,7 +74,6 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
         raceSessionController = RaceSessionController(
             localRepository = localRepository,
             nearbyConnectionsManager = nearbyConnectionsManager,
-            chirpSyncEngine = chirpSyncEngine,
         )
         raceSessionController.setLocalDeviceIdentity(localDeviceId(), localEndpointName())
         sensorNativeController.setEventListener(::onSensorEvent)
@@ -102,31 +99,6 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
                     requestPermissionsIfNeeded {
                         setSetupBusy(false)
                     }
-                },
-                onConnectEndpoint = { endpointId ->
-                    if (uiState.value.setupBusy) return@SprintSyncApp
-                    setSetupBusy(true)
-                    try {
-                        nearbyConnectionsManager.requestConnection(
-                            endpointId = endpointId,
-                            endpointName = localEndpointName(),
-                        ) { result ->
-                            result.exceptionOrNull()?.let { error ->
-                                appendEvent("connect error: ${error.localizedMessage ?: "unknown"}")
-                            }
-                            setSetupBusy(false)
-                            syncControllerSummaries()
-                        }
-                    } catch (error: Throwable) {
-                        appendEvent("connect error: ${error.localizedMessage ?: "unknown"}")
-                        setSetupBusy(false)
-                        syncControllerSummaries()
-                    }
-                },
-                onGoToLobby = {
-                    if (uiState.value.setupBusy) return@SprintSyncApp
-                    raceSessionController.goToLobby()
-                    syncControllerSummaries()
                 },
                 onStartHosting = {
                     if (uiState.value.setupBusy) return@SprintSyncApp
@@ -156,34 +128,6 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
                         }
                     }
                 },
-                onStartHostingPointToPoint = {
-                    if (uiState.value.setupBusy) return@SprintSyncApp
-                    setSetupBusy(true)
-                    requestPermissionsIfNeeded {
-                        raceSessionController.setNetworkRole(SessionNetworkRole.HOST)
-                        nearbyConnectionsManager.configureNativeClockSyncHost(
-                            enabled = true,
-                            requireSensorDomainClock = false,
-                        )
-                        try {
-                            nearbyConnectionsManager.startHosting(
-                                serviceId = DEFAULT_SERVICE_ID,
-                                endpointName = localEndpointName(),
-                                strategy = NearbyTransportStrategy.POINT_TO_POINT,
-                            ) { result ->
-                                result.exceptionOrNull()?.let { error ->
-                                    appendEvent("host p2p error: ${error.localizedMessage ?: "unknown"}")
-                                }
-                                setSetupBusy(false)
-                                syncControllerSummaries()
-                            }
-                        } catch (error: Throwable) {
-                            appendEvent("host p2p error: ${error.localizedMessage ?: "unknown"}")
-                            setSetupBusy(false)
-                            syncControllerSummaries()
-                        }
-                    }
-                },
                 onStartDiscovery = {
                     if (uiState.value.setupBusy) return@SprintSyncApp
                     setSetupBusy(true)
@@ -207,32 +151,34 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
                         }
                     }
                 },
-                onStartDiscoveryPointToPoint = {
-                    if (uiState.value.setupBusy) return@SprintSyncApp
-                    setSetupBusy(true)
-                    requestPermissionsIfNeeded {
-                        raceSessionController.setNetworkRole(SessionNetworkRole.CLIENT)
-                        try {
-                            nearbyConnectionsManager.startDiscovery(
-                                serviceId = DEFAULT_SERVICE_ID,
-                                strategy = NearbyTransportStrategy.POINT_TO_POINT,
-                            ) { result ->
-                                result.exceptionOrNull()?.let { error ->
-                                    appendEvent("discovery p2p error: ${error.localizedMessage ?: "unknown"}")
-                                }
-                                setSetupBusy(false)
-                                syncControllerSummaries()
-                            }
-                        } catch (error: Throwable) {
-                            appendEvent("discovery p2p error: ${error.localizedMessage ?: "unknown"}")
-                            setSetupBusy(false)
-                            syncControllerSummaries()
-                        }
-                    }
-                },
                 onStartMonitoring = {
                     requestPermissionsIfNeeded {
+                        val devicesCount = raceSessionController.totalDeviceCount()
+                        val isStar = nearbyConnectionsManager.currentStrategy() == NearbyTransportStrategy.STAR
+                        val willSwitchToP2p = (devicesCount == 2 && isStar)
+
                         val started = raceSessionController.startMonitoring()
+                        if (started && willSwitchToP2p) {
+                            raceSessionController.broadcastSwitchToP2p()
+                            raceSessionController.setReconnectingToP2p(true)
+                            lifecycleScope.launch {
+                                delay(500)
+                                nearbyConnectionsManager.stopAll()
+                                nearbyConnectionsManager.configureNativeClockSyncHost(
+                                    enabled = true,
+                                    requireSensorDomainClock = false,
+                                )
+                                nearbyConnectionsManager.startHosting(
+                                    serviceId = DEFAULT_SERVICE_ID,
+                                    endpointName = localEndpointName(),
+                                    strategy = NearbyTransportStrategy.POINT_TO_POINT,
+                                ) { result ->
+                                    raceSessionController.setReconnectingToP2p(false)
+                                    // Snapshot broadcast handles the rest
+                                }
+                            }
+                        }
+
                         logRuntimeDiagnostic(
                             "startMonitoring requested: started=$started role=${raceSessionController.localDeviceRole().name} " +
                                 "shouldRunLocal=${shouldRunLocalMonitoring()} resumed=$isAppResumed",
@@ -255,27 +201,6 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
                 },
                 onAssignCameraFacing = { deviceId, facing ->
                     raceSessionController.assignCameraFacing(deviceId, facing)
-                    syncControllerSummaries()
-                },
-                onStartChirpSync = {
-                    if (raceSessionController.uiState.value.networkRole == SessionNetworkRole.HOST) {
-                        if (raceSessionController.uiState.value.connectedEndpoints.isEmpty()) {
-                            appendEvent("chirp sync ignored: no connected endpoint")
-                        } else {
-                            raceSessionController.startChirpSyncAllConnected()
-                        }
-                    } else {
-                        val endpointId = firstConnectedEndpointId()
-                        if (endpointId == null) {
-                            appendEvent("chirp sync ignored: no connected endpoint")
-                        } else {
-                            raceSessionController.startChirpSync(endpointId)
-                        }
-                    }
-                    syncControllerSummaries()
-                },
-                onEndChirpSync = {
-                    raceSessionController.clearChirpLock(broadcast = true)
                     syncControllerSummaries()
                 },
                 onUpdateThreshold = { value ->
@@ -377,6 +302,46 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
 
     private fun onNearbyEvent(event: NearbyEvent) {
         raceSessionController.onNearbyEvent(event)
+        val state = raceSessionController.uiState.value
+        
+        if (event is NearbyEvent.EndpointFound) {
+            val role = state.networkRole
+            if (role == SessionNetworkRole.CLIENT && state.connectedEndpoints.isEmpty()) {
+                try {
+                    nearbyConnectionsManager.requestConnection(
+                        endpointId = event.endpointId,
+                        endpointName = localEndpointName(),
+                    ) { result ->
+                        result.exceptionOrNull()?.let { error ->
+                            appendEvent("auto-connect error: ${error.localizedMessage}")
+                        }
+                    }
+                } catch (e: Exception) {
+                    appendEvent("auto-connect error: ${e.localizedMessage}")
+                }
+            }
+        } else if (event is NearbyEvent.PayloadReceived) {
+            if (state.lastEvent == "switch_to_p2p") {
+                lifecycleScope.launch {
+                    nearbyConnectionsManager.stopAll()
+                    delay(500)
+                    nearbyConnectionsManager.startDiscovery(
+                        serviceId = DEFAULT_SERVICE_ID,
+                        strategy = NearbyTransportStrategy.POINT_TO_POINT,
+                    ) { result ->
+                        result.exceptionOrNull()?.let { error ->
+                            appendEvent("p2p discovery error: ${error.localizedMessage}")
+                        }
+                    }
+                }
+            }
+        } else if (event is NearbyEvent.EndpointDisconnected) {
+            if (state.networkRole == SessionNetworkRole.NONE) {
+                // Controller reset us because host dropped outside of P2P reconnect
+                nearbyConnectionsManager.stopAll()
+            }
+        }
+
         val type = when (event) {
             is NearbyEvent.EndpointFound -> "endpoint_found"
             is NearbyEvent.EndpointLost -> "endpoint_lost"
@@ -482,6 +447,10 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
         val motionBefore = motionDetectionController.uiState.value
         val shouldRunLocalCapture = shouldRunLocalMonitoring()
 
+        if (raceState.stage == SessionStage.LOBBY || raceState.stage == SessionStage.MONITORING) {
+            sensorNativeController.warmupGpsSync()
+        }
+
         when (
             resolveLocalCaptureAction(
                 monitoringActive = raceState.monitoringActive,
@@ -536,9 +505,8 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
         val localRole = raceSessionController.localDeviceRole()
 
         val monitoringSyncMode = when {
-            !isClient || !hasPeers || !raceState.monitoringActive -> "-"
+            !isClient || !hasPeers || raceState.stage == SessionStage.SETUP -> "-"
             raceSessionController.hasFreshGpsLock() -> "GPS"
-            raceSessionController.hasFreshChirpLock() -> "CHIRP"
             raceSessionController.hasFreshClockLock() -> "NTP"
             else -> "-"
         }
@@ -594,15 +562,6 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
             "$roleLabel at ${trigger.triggerSensorNanos}ns (score ${"%.4f".format(trigger.score)})"
         }
 
-        val chirpSyncStatusText = when {
-            raceState.chirpSyncInProgress -> "Calibrating..."
-            raceSessionController.hasFreshChirpLock() && clockState.chirpJitterNanos != null ->
-                "Locked (+/-${clockState.chirpJitterNanos / 1000L} us)"
-            raceSessionController.hasFreshChirpLock() -> "Locked"
-            clockState.chirpJitterNanos != null -> "Stale (+/-${clockState.chirpJitterNanos / 1000L} us)"
-            else -> "Not calibrated"
-        }
-
         val clockSummary = when {
             raceSessionController.hasFreshClockLock() && clockState.hostMinusClientElapsedNanos != null -> {
                 "Locked ${clockState.hostMinusClientElapsedNanos}ns"
@@ -614,17 +573,6 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
 
             else -> "Unlocked"
         }
-        val chirpSummary = when {
-            raceSessionController.hasFreshChirpLock() && clockState.chirpHostMinusClientElapsedNanos != null -> {
-                "Locked ${clockState.chirpHostMinusClientElapsedNanos}ns"
-            }
-
-            clockState.chirpHostMinusClientElapsedNanos != null -> {
-                "Stale ${clockState.chirpHostMinusClientElapsedNanos}ns"
-            }
-
-            else -> "Unlocked"
-        }
         updateUiState {
             copy(
                 stage = raceState.stage,
@@ -632,12 +580,10 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
                 sessionSummary = raceState.stage.name.lowercase(),
                 monitoringSummary = monitoringSummary,
                 clockSummary = clockSummary,
-                chirpSummary = chirpSummary,
                 startedSensorNanos = raceState.timeline.hostStartSensorNanos,
                 splitSensorNanos = raceState.timeline.hostSplitSensorNanos,
                 stoppedSensorNanos = raceState.timeline.hostStopSensorNanos,
                 devices = raceState.devices,
-                canGoToLobby = raceSessionController.canGoToLobby(),
                 canStartMonitoring = raceSessionController.canStartMonitoring(),
                 canShowSplitControls = raceSessionController.canShowSplitControls(),
                 isHost = isHost,
@@ -647,10 +593,6 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
                 monitoringSyncModeLabel = monitoringSyncMode,
                 monitoringLatencyMs = monitoringLatencyMs,
                 hasConnectedPeers = hasPeers,
-                chirpSyncInProgress = raceState.chirpSyncInProgress,
-                chirpLockActive = raceSessionController.hasFreshChirpLock(),
-                chirpSyncStatusText = chirpSyncStatusText,
-                chirpQualityUs = clockState.chirpJitterNanos?.let { (it / 1000L).toInt() },
                 clockLockWarningText = clockLockWarningText,
                 runStatusLabel = runStatusLabel,
                 runMarksCount = marksCount,
@@ -694,7 +636,6 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
             Manifest.permission.CAMERA,
             Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.RECORD_AUDIO,
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions += Manifest.permission.NEARBY_WIFI_DEVICES

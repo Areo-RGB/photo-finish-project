@@ -18,7 +18,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.paul.sprintsync"
+        applicationId = "sync.sprint"
         minSdk = 24
         targetSdk = 35
         versionCode = 1

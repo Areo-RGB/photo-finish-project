@@ -65,7 +65,6 @@ data class SprintSyncUiState(
     val networkSummary: String = "Ready",
     val monitoringSummary: String = "Idle",
     val clockSummary: String = "Unlocked",
-    val chirpSummary: String = "Unlocked",
     val sessionSummary: String = "setup",
     val startedSensorNanos: Long? = null,
     val splitSensorNanos: List<Long> = emptyList(),
@@ -73,7 +72,6 @@ data class SprintSyncUiState(
     val discoveredEndpoints: Map<String, String> = emptyMap(),
     val connectedEndpoints: Set<String> = emptySet(),
     val devices: List<SessionDevice> = emptyList(),
-    val canGoToLobby: Boolean = false,
     val canStartMonitoring: Boolean = false,
     val canShowSplitControls: Boolean = false,
     val isHost: Boolean = false,
@@ -83,10 +81,6 @@ data class SprintSyncUiState(
     val monitoringSyncModeLabel: String = "-",
     val monitoringLatencyMs: Int? = null,
     val hasConnectedPeers: Boolean = false,
-    val chirpSyncInProgress: Boolean = false,
-    val chirpLockActive: Boolean = false,
-    val chirpSyncStatusText: String = "Not calibrated",
-    val chirpQualityUs: Int? = null,
     val clockLockWarningText: String? = null,
     val runStatusLabel: String = "Ready",
     val runMarksCount: Int = 0,
@@ -117,18 +111,12 @@ fun SprintSyncApp(
     previewViewFactory: SensorNativePreviewViewFactory,
     onRequestPermissions: () -> Unit,
     onStartHosting: () -> Unit,
-    onStartHostingPointToPoint: () -> Unit,
     onStartDiscovery: () -> Unit,
-    onStartDiscoveryPointToPoint: () -> Unit,
-    onConnectEndpoint: (String) -> Unit,
-    onGoToLobby: () -> Unit,
     onStartMonitoring: () -> Unit,
     onStopMonitoring: () -> Unit,
     onResetRun: () -> Unit,
     onAssignRole: (String, SessionDeviceRole) -> Unit,
     onAssignCameraFacing: (String, SessionCameraFacing) -> Unit,
-    onStartChirpSync: () -> Unit,
-    onEndChirpSync: () -> Unit,
     onUpdateThreshold: (Double) -> Unit,
     onUpdateRoiCenter: (Double) -> Unit,
     onUpdateRoiWidth: (Double) -> Unit,
@@ -181,23 +169,10 @@ fun SprintSyncApp(
                         SetupActionsCard(
                             permissionGranted = uiState.permissionGranted,
                             setupBusy = uiState.setupBusy,
-                            canGoToLobby = uiState.canGoToLobby,
                             onRequestPermissions = onRequestPermissions,
                             onStartHosting = onStartHosting,
-                            onStartHostingPointToPoint = onStartHostingPointToPoint,
                             onStartDiscovery = onStartDiscovery,
-                            onStartDiscoveryPointToPoint = onStartDiscoveryPointToPoint,
-                            onGoToLobby = onGoToLobby,
                         )
-                    }
-                    if (uiState.discoveredEndpoints.isNotEmpty()) {
-                        item {
-                            DiscoveredDevicesCard(
-                                discoveredEndpoints = uiState.discoveredEndpoints,
-                                setupBusy = uiState.setupBusy,
-                                onConnect = onConnectEndpoint,
-                            )
-                        }
                     }
                     item {
                         ConnectedDevicesListCard(uiState.devices)
@@ -215,17 +190,14 @@ fun SprintSyncApp(
                             onStopHosting = onStopHosting,
                         )
                     }
-                    item {
-                        ChirpSyncCard(
-                            isClient = uiState.networkRole == SessionNetworkRole.CLIENT,
-                            isHost = uiState.networkRole == SessionNetworkRole.HOST,
-                            hasConnectedPeers = uiState.hasConnectedPeers,
-                            chirpSyncInProgress = uiState.chirpSyncInProgress,
-                            chirpLockActive = uiState.chirpLockActive,
-                            statusText = uiState.chirpSyncStatusText,
-                            onStartChirpSync = onStartChirpSync,
-                            onEndChirpSync = onEndChirpSync,
-                        )
+                    if (uiState.hasConnectedPeers) {
+                        item {
+                            MonitoringConnectionCard(
+                                connectionTypeLabel = uiState.monitoringConnectionTypeLabel,
+                                syncModeLabel = uiState.monitoringSyncModeLabel,
+                                latencyMs = uiState.monitoringLatencyMs,
+                            )
+                        }
                     }
                     item {
                         DeviceAssignmentsCard(
@@ -258,7 +230,6 @@ fun SprintSyncApp(
                             connectionTypeLabel = uiState.monitoringConnectionTypeLabel,
                             syncModeLabel = uiState.monitoringSyncModeLabel,
                             latencyMs = uiState.monitoringLatencyMs,
-                            chirpQualityUs = uiState.chirpQualityUs,
                         )
                     }
                     if (uiState.clockLockWarningText != null) {
@@ -323,7 +294,6 @@ private fun StatusCard(uiState: SprintSyncUiState) {
             MetricDisplay(label = "Network", value = uiState.networkSummary)
             MetricDisplay(label = "Motion", value = uiState.monitoringSummary)
             MetricDisplay(label = "Clock", value = uiState.clockSummary)
-            MetricDisplay(label = "Chirp", value = uiState.chirpSummary)
             uiState.lastNearbyEvent?.let { Text("Last Nearby: $it") }
             uiState.lastSensorEvent?.let { Text("Last Sensor: $it") }
             if (!uiState.permissionGranted && uiState.deniedPermissions.isNotEmpty()) {
@@ -340,13 +310,9 @@ private fun StatusCard(uiState: SprintSyncUiState) {
 private fun SetupActionsCard(
     permissionGranted: Boolean,
     setupBusy: Boolean,
-    canGoToLobby: Boolean,
     onRequestPermissions: () -> Unit,
     onStartHosting: () -> Unit,
-    onStartHostingPointToPoint: () -> Unit,
     onStartDiscovery: () -> Unit,
-    onStartDiscoveryPointToPoint: () -> Unit,
-    onGoToLobby: () -> Unit,
 ) {
     val setupActionsEnabled = !setupBusy
 
@@ -358,40 +324,7 @@ private fun SetupActionsCard(
                     PrimaryButton(text = "Permissions", onClick = onRequestPermissions, enabled = setupActionsEnabled)
                 }
                 PrimaryButton(text = "Host", onClick = onStartHosting, enabled = setupActionsEnabled)
-                PrimaryButton(text = "Host 1:1", onClick = onStartHostingPointToPoint, enabled = setupActionsEnabled)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PrimaryButton(text = "Join", onClick = onStartDiscovery, enabled = setupActionsEnabled)
-                PrimaryButton(text = "Join 1:1", onClick = onStartDiscoveryPointToPoint, enabled = setupActionsEnabled)
-                if (canGoToLobby) {
-                    PrimaryButton(text = "Next", onClick = onGoToLobby, enabled = setupActionsEnabled)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DiscoveredDevicesCard(
-    discoveredEndpoints: Map<String, String>,
-    setupBusy: Boolean,
-    onConnect: (String) -> Unit,
-) {
-    SprintSyncCard {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            SectionHeader("Discovered Devices")
-            discoveredEndpoints.forEach { (endpointId, endpointName) ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column {
-                        Text(endpointName, fontWeight = FontWeight.Medium)
-                        Text(endpointId, style = MaterialTheme.typography.bodySmall)
-                    }
-                    TextButton(onClick = { onConnect(endpointId) }, enabled = !setupBusy) { Text("Connect") }
-                }
             }
         }
     }
@@ -418,35 +351,6 @@ private fun LobbyActionsCard(
             if (isHost && timelineStarted) {
                 OutlinedButton(onClick = onResetRun) {
                     Text("Reset Run")
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ChirpSyncCard(
-    isClient: Boolean,
-    isHost: Boolean,
-    hasConnectedPeers: Boolean,
-    chirpSyncInProgress: Boolean,
-    chirpLockActive: Boolean,
-    statusText: String,
-    onStartChirpSync: () -> Unit,
-    onEndChirpSync: () -> Unit,
-) {
-    val canStart = (isClient || isHost) && hasConnectedPeers && !chirpSyncInProgress
-    val canEnd = chirpLockActive || chirpSyncInProgress
-    SprintSyncCard {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            SectionHeader("Audio Chirp Sync")
-            Text("Status: $statusText", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onStartChirpSync, enabled = canStart) {
-                    Text("Start Chirp Sync")
-                }
-                OutlinedButton(onClick = onEndChirpSync, enabled = canEnd) {
-                    Text("End Chirp Sync")
                 }
             }
         }
@@ -597,12 +501,10 @@ private fun MonitoringConnectionCard(
     connectionTypeLabel: String,
     syncModeLabel: String,
     latencyMs: Int?,
-    chirpQualityUs: Int?,
 ) {
     val latencyLabel = when (syncModeLabel) {
         "NTP" -> if (latencyMs == null) "-" else "$latencyMs ms"
         "GPS" -> "GPS"
-        "CHIRP" -> if (chirpQualityUs == null) "Chirp" else "$chirpQualityUs us"
         else -> "-"
     }
     SprintSyncCard {
