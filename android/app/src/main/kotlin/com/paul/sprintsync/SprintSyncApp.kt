@@ -289,6 +289,8 @@ fun SprintSyncApp(
                         RunMetricsCard(
                             uiState = uiState,
                             isHost = uiState.isHost,
+                            operatingMode = uiState.operatingMode,
+                            showDebugInfo = showDebugInfo,
                             onResetRun = onResetRun,
                         )
                     }
@@ -699,7 +701,7 @@ private fun MonitoringSummaryCard(
                         onStartDisplayDiscovery = onStartDisplayDiscovery,
                         onConnectDisplayHost = onConnectDisplayHost,
                     )
-                    if (effectiveShowPreview) {
+                    if (shouldShowMonitoringPreview(operatingMode, effectiveShowPreview)) {
                         Box(
                             modifier = Modifier.fillMaxWidth(),
                             contentAlignment = Alignment.Center,
@@ -739,47 +741,53 @@ private fun MonitoringPreviewInfoPanel(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                "Role: ${sessionDeviceRoleLabel(localRole)}",
-                fontWeight = FontWeight.Bold,
-            )
-            if (!isHost) {
-                Text("Waiting for host...", color = Color.Gray, fontStyle = FontStyle.Italic)
+        if (shouldShowMonitoringRoleAndToggles(operatingMode)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Role: ${sessionDeviceRoleLabel(localRole)}",
+                    fontWeight = FontWeight.Bold,
+                )
+                if (!isHost) {
+                    Text("Waiting for host...", color = Color.Gray, fontStyle = FontStyle.Italic)
+                }
             }
         }
         Text("Connection: $connectionTypeLabel", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
         Text("Sync: $syncModeLabel · Latency: $latencyLabel", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                "Monitoring: ${if (userMonitoringEnabled) "On" else "Off"}",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Spacer(Modifier.width(8.dp))
-            Switch(
-                checked = userMonitoringEnabled,
-                enabled = true,
-                onCheckedChange = onSetMonitoringEnabled,
-            )
+        if (shouldShowMonitoringRoleAndToggles(operatingMode)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Monitoring: ${if (userMonitoringEnabled) "On" else "Off"}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Spacer(Modifier.width(8.dp))
+                Switch(
+                    checked = userMonitoringEnabled,
+                    enabled = true,
+                    onCheckedChange = onSetMonitoringEnabled,
+                )
+            }
         }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("Preview", style = MaterialTheme.typography.bodySmall)
-            Spacer(Modifier.width(8.dp))
-            Switch(
-                checked = effectiveShowPreview,
-                enabled = true,
-                onCheckedChange = onShowPreviewChanged,
-            )
+        if (shouldShowMonitoringPreviewToggle(operatingMode)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Preview", style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.width(8.dp))
+                Switch(
+                    checked = effectiveShowPreview,
+                    enabled = true,
+                    onCheckedChange = onShowPreviewChanged,
+                )
+            }
         }
         if (shouldShowDisplayRelayControls(operatingMode)) {
             Spacer(Modifier.height(4.dp))
@@ -940,6 +948,8 @@ private fun AdvancedDetectionCard(
 private fun RunMetricsCard(
     uiState: SprintSyncUiState,
     isHost: Boolean,
+    operatingMode: SessionOperatingMode,
+    showDebugInfo: Boolean,
     onResetRun: () -> Unit,
 ) {
     val fpsLabel = uiState.observedFps?.let { String.format("%.1f", it) } ?: "--.-"
@@ -957,7 +967,9 @@ private fun RunMetricsCard(
     SprintSyncCard {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             SectionHeader("Sprint Stopwatch")
-            Text("Camera: $fpsLabel fps · ${uiState.cameraFpsModeLabel}$targetSuffix", style = MaterialTheme.typography.bodySmall)
+            if (shouldShowCameraFpsInfo(showDebugInfo)) {
+                Text("Camera: $fpsLabel fps · ${uiState.cameraFpsModeLabel}$targetSuffix", style = MaterialTheme.typography.bodySmall)
+            }
             Text("Timer")
             Text(
                 text = uiState.elapsedDisplay,
@@ -976,8 +988,10 @@ private fun RunMetricsCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 MetricDisplay(label = "Status", value = uiState.runStatusLabel)
-                MetricDisplay(label = "Marks", value = uiState.runMarksCount.toString())
-                MetricDisplay(label = "Finish", value = finishValue)
+                if (shouldShowRunDetailMetrics(operatingMode)) {
+                    MetricDisplay(label = "Marks", value = uiState.runMarksCount.toString())
+                    MetricDisplay(label = "Finish", value = finishValue)
+                }
             }
         }
     }
@@ -1011,7 +1025,8 @@ private fun DisplayResultsCard(
         val count = rows.size.coerceAtLeast(1)
         val availableHeight = maxHeight.takeIf { it > 0.dp } ?: (layout.rowHeight * count) + (layout.rowSpacing * (count - 1))
         val rowHeight = ((availableHeight - (layout.rowSpacing * (count - 1))) / count).coerceAtLeast(layout.minRowHeight)
-        val clampedTimeFont = clampDisplayTimeFont(layout.timeFont, rowHeight, density)
+        val rowContentWidth = (maxWidth - (layout.horizontalPadding * 2)).coerceAtLeast(1.dp)
+        val clampedTimeFont = clampDisplayTimeFont(layout.timeFont, rowHeight, rowContentWidth, density)
         val clampedDeviceFont = clampDisplayLabelFont(layout.deviceFont, rowHeight, density)
 
         Column(
@@ -1053,6 +1068,8 @@ private fun DisplayResultsCard(
                         ),
                         color = Color(0xFF101015),
                         textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        softWrap = false,
                     )
                 }
             }
@@ -1117,6 +1134,20 @@ internal fun shouldShowMonitoringResetAction(
 internal fun shouldShowDisplayRelayControls(mode: SessionOperatingMode): Boolean =
     mode == SessionOperatingMode.SINGLE_DEVICE
 
+internal fun shouldShowMonitoringRoleAndToggles(mode: SessionOperatingMode): Boolean =
+    mode != SessionOperatingMode.SINGLE_DEVICE
+
+internal fun shouldShowMonitoringPreview(mode: SessionOperatingMode, effectiveShowPreview: Boolean): Boolean =
+    mode == SessionOperatingMode.SINGLE_DEVICE || effectiveShowPreview
+
+internal fun shouldShowMonitoringPreviewToggle(mode: SessionOperatingMode): Boolean =
+    mode != SessionOperatingMode.SINGLE_DEVICE
+
+internal fun shouldShowRunDetailMetrics(mode: SessionOperatingMode): Boolean =
+    mode != SessionOperatingMode.SINGLE_DEVICE
+
+internal fun shouldShowCameraFpsInfo(showDebugInfo: Boolean): Boolean = showDebugInfo
+
 internal data class DisplayLayoutSpec(
     val rowHeight: Dp,
     val minRowHeight: Dp,
@@ -1168,9 +1199,17 @@ internal fun displayLayoutSpecForCount(count: Int): DisplayLayoutSpec {
     }
 }
 
-internal fun clampDisplayTimeFont(base: TextUnit, rowHeight: Dp, density: androidx.compose.ui.unit.Density): TextUnit {
+internal fun clampDisplayTimeFont(
+    base: TextUnit,
+    rowHeight: Dp,
+    rowContentWidth: Dp,
+    density: androidx.compose.ui.unit.Density,
+): TextUnit {
     val maxByHeight = with(density) { (rowHeight * 0.74f).toSp() }
-    return minOf(base.value, maxByHeight.value).sp
+    val maxChars = 9f // "MM:SS.mmm"
+    val widthFactor = 0.62f // Approximate monospace glyph width in ems.
+    val maxByWidth = with(density) { (rowContentWidth / (maxChars * widthFactor)).toSp() }
+    return minOf(base.value, maxByHeight.value, maxByWidth.value).sp
 }
 
 internal fun clampDisplayLabelFont(base: TextUnit, rowHeight: Dp, density: androidx.compose.ui.unit.Density): TextUnit {
