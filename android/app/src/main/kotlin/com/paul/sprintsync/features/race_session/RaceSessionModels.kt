@@ -439,6 +439,43 @@ data class SessionSwitchToP2pMessage(val timestampNanos: Long) {
     }
 }
 
+data class SessionDeviceIdentityMessage(
+    val stableDeviceId: String,
+    val deviceName: String,
+) {
+    fun toJsonString(): String {
+        return JSONObject()
+            .put("type", TYPE)
+            .put("stableDeviceId", stableDeviceId)
+            .put("deviceName", deviceName)
+            .toString()
+    }
+
+    companion object {
+        const val TYPE = "device_identity"
+
+        fun tryParse(raw: String): SessionDeviceIdentityMessage? {
+            val decoded = try {
+                JSONObject(raw)
+            } catch (_: JSONException) {
+                return null
+            }
+            if (decoded.optString("type") != TYPE) {
+                return null
+            }
+            val stableDeviceId = decoded.optString("stableDeviceId", "").trim()
+            val deviceName = decoded.optString("deviceName", "").trim()
+            if (stableDeviceId.isEmpty() || deviceName.isEmpty()) {
+                return null
+            }
+            return SessionDeviceIdentityMessage(
+                stableDeviceId = stableDeviceId,
+                deviceName = deviceName,
+            )
+        }
+    }
+}
+
 fun sessionStageFromName(name: String?): SessionStage? {
     if (name == null) {
         return null

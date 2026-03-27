@@ -1,7 +1,6 @@
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
 > Task :app:preBuild UP-TO-DATE
 > Task :app:preDebugBuild UP-TO-DATE
-> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
-> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
 > Task :app:checkDebugAarMetadata UP-TO-DATE
 > Task :app:generateDebugResValues UP-TO-DATE
 > Task :app:mapDebugSourceSetPaths UP-TO-DATE
@@ -15,84 +14,382 @@
 > Task :app:processDebugManifest UP-TO-DATE
 > Task :app:processDebugManifestForPackage UP-TO-DATE
 > Task :app:processDebugResources UP-TO-DATE
+> Task :app:compileDebugKotlin UP-TO-DATE
 > Task :app:javaPreCompileDebug UP-TO-DATE
-> Task :app:mergeDebugShaders UP-TO-DATE
-> Task :app:compileDebugShaders NO-SOURCE
-> Task :app:generateDebugAssets UP-TO-DATE
-> Task :app:mergeDebugAssets UP-TO-DATE
-> Task :app:compressDebugAssets UP-TO-DATE
-> Task :app:desugarDebugFileDependencies UP-TO-DATE
-> Task :app:checkDebugDuplicateClasses UP-TO-DATE
-> Task :app:mergeExtDexDebug UP-TO-DATE
-> Task :app:mergeLibDexDebug UP-TO-DATE
-> Task :app:mergeDebugJniLibFolders UP-TO-DATE
-> Task :app:mergeDebugNativeLibs UP-TO-DATE
-> Task :app:stripDebugDebugSymbols UP-TO-DATE
-> Task :app:validateSigningDebug UP-TO-DATE
-> Task :app:writeDebugAppMetadata UP-TO-DATE
-> Task :app:writeDebugSigningConfigVersions UP-TO-DATE
+> Task :app:compileDebugJavaWithJavac NO-SOURCE
+> Task :app:bundleDebugClassesToCompileJar UP-TO-DATE
 
-> Task :app:compileDebugKotlin FAILED
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:414:17 Unresolved reference 'OutlinedPrimaryButton'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:415:21 @Composable invocations can only happen from the context of a @Composable function
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:419:32 No value passed for parameter 'content'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:443:17 Unresolved reference 'OutlinedPrimaryButton'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:444:17 Unresolved reference 'OutlinedPrimaryButton'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:555:55 Argument type mismatch: actual type is 'Function0<String>', but 'String' was expected.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:555:92 Syntax error: Expecting ','.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:555:94 Syntax error: Expecting '"'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:556:17 Unresolved reference 'MetricDisplay'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:556:31 Unresolved reference 'label'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:556:31 Only expressions are allowed in this context.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:556:47 Syntax error: Expecting ')'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:556:49 Argument already passed for this parameter.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:556:104 Syntax error: Expecting ','.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:556:104 Mixing named and positional arguments is not allowed unless the order of the arguments matches the order of the parameters.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:556:106 Syntax error: Expecting '"'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:556:106 Syntax error: Expecting ')'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:579:17 Unresolved reference 'OutlinedPrimaryButton'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:716:60 Argument type mismatch: actual type is 'Function0<String>', but 'String' was expected.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:716:102 Syntax error: Expecting ','.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:716:104 Syntax error: Expecting '"'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:717:17 Unresolved reference 'Slider'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:718:21 Unresolved reference 'value'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:718:21 Only expressions are allowed in this context.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:718:56 Syntax error: Expecting ')'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:719:21 No parameter with name 'onValueChange' found.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:719:57 Unresolved reference 'it'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:720:21 No parameter with name 'valueRange' found.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:723:61 Argument type mismatch: actual type is 'Function0<String>', but 'String' was expected.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:723:104 Syntax error: Expecting ','.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:723:106 Syntax error: Expecting '"'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:724:17 Unresolved reference 'Slider'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:725:21 Unresolved reference 'value'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:725:21 Only expressions are allowed in this context.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:725:57 Syntax error: Expecting ')'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:726:21 No parameter with name 'onValueChange' found.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:726:57 Unresolved reference 'it'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:727:21 No parameter with name 'valueRange' found.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:730:60 Argument type mismatch: actual type is 'Function0<String>', but 'String' was expected.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:730:101 Syntax error: Expecting ','.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:730:103 Syntax error: Expecting '"'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:731:17 Unresolved reference 'Slider'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:732:21 Unresolved reference 'value'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:732:21 Only expressions are allowed in this context.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:732:55 Syntax error: Expecting ')'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:733:21 No parameter with name 'onValueChange' found.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:733:56 Unresolved reference 'it'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:734:21 No parameter with name 'valueRange' found.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:749:69 Argument type mismatch: actual type is 'Function0<Comparable<*> & Serializable>', but 'String' was expected.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:749:102 Syntax error: Expecting ','.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:749:104 Syntax error: Expecting '"'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:750:17 Unresolved reference 'Text'.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:753:49 Syntax error: Expecting ','.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:754:17 Argument type mismatch: actual type is 'Unit', but 'String?' was expected.
-e: file:///C:/Users/paul/projects/photo-finish/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt:760:18 Syntax error: Expecting ')'.
+> Task :app:compileDebugUnitTestKotlin FAILED
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/chirp_sync/AcousticChirpSyncEngineTest.kt:10:22 Unresolved reference 'AcousticChirpSyncEngine'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/chirp_sync/AcousticChirpSyncEngineTest.kt:24:28 Unresolved reference 'AcousticChirpSyncEngine'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/chirp_sync/AcousticChirpSyncEngineTest.kt:25:27 Unresolved reference 'AcousticChirpSyncEngine'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/chirp_sync/AcousticChirpSyncEngineTest.kt:26:20 Unresolved reference 'AcousticChirpSyncEngine'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/chirp_sync/AcousticChirpSyncEngineTest.kt:31:27 Unresolved reference 'AcousticChirpSyncEngine'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/chirp_sync/AcousticChirpSyncEngineTest.kt:32:32 Unresolved reference 'AcousticChirpSyncEngine'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/chirp_sync/AcousticChirpSyncEngineTest.kt:36:22 Unresolved reference 'AcousticChirpSyncEngine'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/chirp_sync/AcousticChirpSyncEngineTest.kt:38:31 Unresolved reference 'AcousticChirpSyncEngine'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/chirp_sync/AcousticChirpSyncEngineTest.kt:39:32 Unresolved reference 'AcousticChirpSyncEngine'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/chirp_sync/AcousticChirpSyncEngineTest.kt:43:22 Unresolved reference 'AcousticChirpSyncEngine'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:3:39 Unresolved reference 'ChirpCalibrationResult'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:26:26 None of the following candidates is applicable:
+constructor(loadLastRun: suspend () -> LastRunResult?, saveLastRun: suspend (LastRunResult) -> Unit, sendMessage: (String, String, Function1<Result<Unit>, Unit>) -> Unit, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+constructor(localRepository: LocalRepository, nearbyConnectionsManager: NearbyConnectionsManager, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:29:29 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:29:32 Cannot infer type for value parameter 'messageJson'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:29:45 Cannot infer type for value parameter 'onComplete'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:31:17 Unresolved reference 'onComplete'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:33:34 Cannot infer type for value parameter 'calibrationId'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:33:49 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:33:52 Cannot infer type for value parameter 'profile'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:33:61 Cannot infer type for value parameter 'sampleCount'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:33:74 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:33:77 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:34:17 Unresolved reference 'ChirpCalibrationResult'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:53:20 Unresolved reference 'onNearbyEvent'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:62:20 Unresolved reference 'startClockSyncBurst'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:63:31 Unresolved reference 'uiState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:74:24 Unresolved reference 'onNearbyEvent'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:82:32 Unresolved reference 'uiState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:83:34 Unresolved reference 'clockState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:84:31 Unresolved reference 'hasFreshClockLock'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:89:26 None of the following candidates is applicable:
+constructor(loadLastRun: suspend () -> LastRunResult?, saveLastRun: suspend (LastRunResult) -> Unit, sendMessage: (String, String, Function1<Result<Unit>, Unit>) -> Unit, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+constructor(localRepository: LocalRepository, nearbyConnectionsManager: NearbyConnectionsManager, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:92:29 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:92:32 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:92:35 Cannot infer type for value parameter 'onComplete'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:92:49 Unresolved reference 'onComplete'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:93:34 Cannot infer type for value parameter 'calibrationId'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:93:49 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:93:52 Cannot infer type for value parameter 'profile'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:93:61 Cannot infer type for value parameter 'sampleCount'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:93:74 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:93:77 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:94:17 Unresolved reference 'ChirpCalibrationResult'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:101:20 Unresolved reference 'startClockSyncBurst'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:103:79 Unresolved reference 'uiState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:112:26 None of the following candidates is applicable:
+constructor(loadLastRun: suspend () -> LastRunResult?, saveLastRun: suspend (LastRunResult) -> Unit, sendMessage: (String, String, Function1<Result<Unit>, Unit>) -> Unit, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+constructor(localRepository: LocalRepository, nearbyConnectionsManager: NearbyConnectionsManager, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:114:29 Cannot infer type for value parameter 'run'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:115:39 Unresolved reference 'startedSensorNanos'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:116:38 Unresolved reference 'splitElapsedNanos'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:118:29 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:118:32 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:118:35 Cannot infer type for value parameter 'onComplete'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:118:49 Unresolved reference 'onComplete'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:119:34 Cannot infer type for value parameter 'calibrationId'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:119:49 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:119:52 Cannot infer type for value parameter 'profile'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:119:61 Cannot infer type for value parameter 'sampleCount'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:119:74 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:119:77 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:120:17 Unresolved reference 'ChirpCalibrationResult'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:127:20 Unresolved reference 'ingestLocalTrigger'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:128:20 Unresolved reference 'ingestLocalTrigger'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:129:20 Unresolved reference 'ingestLocalTrigger'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:138:26 None of the following candidates is applicable:
+constructor(loadLastRun: suspend () -> LastRunResult?, saveLastRun: suspend (LastRunResult) -> Unit, sendMessage: (String, String, Function1<Result<Unit>, Unit>) -> Unit, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+constructor(localRepository: LocalRepository, nearbyConnectionsManager: NearbyConnectionsManager, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:141:29 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:141:32 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:141:35 Cannot infer type for value parameter 'onComplete'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:141:49 Unresolved reference 'onComplete'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:142:34 Cannot infer type for value parameter 'calibrationId'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:142:49 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:142:52 Cannot infer type for value parameter 'profile'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:142:61 Cannot infer type for value parameter 'sampleCount'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:142:74 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:142:77 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:143:17 Unresolved reference 'ChirpCalibrationResult'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:150:20 Unresolved reference 'setNetworkRole'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:151:20 Unresolved reference 'updateClockState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:162:20 Unresolved reference 'onNearbyEvent'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:169:39 Unresolved reference 'uiState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:170:49 Unresolved reference 'uiState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:171:41 Unresolved reference 'uiState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:177:26 None of the following candidates is applicable:
+constructor(loadLastRun: suspend () -> LastRunResult?, saveLastRun: suspend (LastRunResult) -> Unit, sendMessage: (String, String, Function1<Result<Unit>, Unit>) -> Unit, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+constructor(localRepository: LocalRepository, nearbyConnectionsManager: NearbyConnectionsManager, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:180:29 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:180:32 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:180:35 Cannot infer type for value parameter 'onComplete'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:180:49 Unresolved reference 'onComplete'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:181:34 Cannot infer type for value parameter 'calibrationId'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:181:49 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:181:52 Cannot infer type for value parameter 'profile'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:181:61 Cannot infer type for value parameter 'sampleCount'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:181:74 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:181:77 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:182:17 Unresolved reference 'ChirpCalibrationResult'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:192:22 Unresolved reference 'SessionChirpCalibrationResultMessage'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:202:20 Unresolved reference 'onNearbyEvent'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:209:39 Unresolved reference 'clockState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:210:37 Unresolved reference 'clockState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:211:31 Unresolved reference 'hasFreshChirpLock'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:216:26 None of the following candidates is applicable:
+constructor(loadLastRun: suspend () -> LastRunResult?, saveLastRun: suspend (LastRunResult) -> Unit, sendMessage: (String, String, Function1<Result<Unit>, Unit>) -> Unit, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+constructor(localRepository: LocalRepository, nearbyConnectionsManager: NearbyConnectionsManager, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:219:29 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:219:32 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:219:35 Cannot infer type for value parameter 'onComplete'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:219:49 Unresolved reference 'onComplete'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:220:34 Cannot infer type for value parameter 'calibrationId'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:220:49 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:220:52 Cannot infer type for value parameter 'profile'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:220:61 Cannot infer type for value parameter 'sampleCount'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:220:74 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:220:77 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:221:17 Unresolved reference 'ChirpCalibrationResult'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:228:20 Unresolved reference 'updateClockState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:238:33 Unresolved reference 'mapClientSensorToHostSensor'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:241:31 Unresolved reference 'hasFreshGpsLock'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:246:26 None of the following candidates is applicable:
+constructor(loadLastRun: suspend () -> LastRunResult?, saveLastRun: suspend (LastRunResult) -> Unit, sendMessage: (String, String, Function1<Result<Unit>, Unit>) -> Unit, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+constructor(localRepository: LocalRepository, nearbyConnectionsManager: NearbyConnectionsManager, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:249:29 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:249:32 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:249:35 Cannot infer type for value parameter 'onComplete'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:249:49 Unresolved reference 'onComplete'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:250:34 Cannot infer type for value parameter 'calibrationId'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:250:49 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:250:52 Cannot infer type for value parameter 'profile'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:250:61 Cannot infer type for value parameter 'sampleCount'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:250:74 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:250:77 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:251:17 Unresolved reference 'ChirpCalibrationResult'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:258:20 Unresolved reference 'setNetworkRole'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:259:20 Unresolved reference 'onNearbyEvent'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:268:20 Unresolved reference 'assignRole'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:269:20 Unresolved reference 'assignRole'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:270:20 Unresolved reference 'goToLobby'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:271:31 Unresolved reference 'startMonitoring'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:273:20 Unresolved reference 'stopHostingAndReturnToSetup'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:275:58 Unresolved reference 'uiState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:276:53 Unresolved reference 'uiState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:277:32 Unresolved reference 'uiState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:278:36 Unresolved reference 'uiState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:283:26 None of the following candidates is applicable:
+constructor(loadLastRun: suspend () -> LastRunResult?, saveLastRun: suspend (LastRunResult) -> Unit, sendMessage: (String, String, Function1<Result<Unit>, Unit>) -> Unit, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+constructor(localRepository: LocalRepository, nearbyConnectionsManager: NearbyConnectionsManager, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:286:29 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:286:32 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:286:35 Cannot infer type for value parameter 'onComplete'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:286:49 Unresolved reference 'onComplete'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:287:34 Cannot infer type for value parameter 'calibrationId'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:287:49 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:287:52 Cannot infer type for value parameter 'profile'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:287:61 Cannot infer type for value parameter 'sampleCount'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:287:74 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:287:77 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:288:17 Unresolved reference 'ChirpCalibrationResult'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:295:20 Unresolved reference 'setNetworkRole'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:301:20 Unresolved reference 'onNearbyEvent'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:308:31 Unresolved reference 'uiState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:309:61 Unresolved reference 'uiState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:314:26 None of the following candidates is applicable:
+constructor(loadLastRun: suspend () -> LastRunResult?, saveLastRun: suspend (LastRunResult) -> Unit, sendMessage: (String, String, Function1<Result<Unit>, Unit>) -> Unit, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+constructor(localRepository: LocalRepository, nearbyConnectionsManager: NearbyConnectionsManager, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:317:29 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:317:32 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:317:35 Cannot infer type for value parameter 'onComplete'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:317:49 Unresolved reference 'onComplete'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:318:34 Cannot infer type for value parameter 'calibrationId'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:318:49 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:318:52 Cannot infer type for value parameter 'profile'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:318:61 Cannot infer type for value parameter 'sampleCount'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:318:74 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:318:77 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:319:17 Unresolved reference 'ChirpCalibrationResult'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:326:20 Unresolved reference 'setNetworkRole'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:333:20 Unresolved reference 'onNearbyEvent'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:340:31 Unresolved reference 'uiState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:341:31 Unresolved reference 'uiState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:342:31 Unresolved reference 'uiState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:343:71 Unresolved reference 'uiState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:354:26 None of the following candidates is applicable:
+constructor(loadLastRun: suspend () -> LastRunResult?, saveLastRun: suspend (LastRunResult) -> Unit, sendMessage: (String, String, Function1<Result<Unit>, Unit>) -> Unit, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+constructor(localRepository: LocalRepository, nearbyConnectionsManager: NearbyConnectionsManager, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:357:29 Cannot infer type for value parameter 'endpointId'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:357:41 Cannot infer type for value parameter 'messageJson'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:357:54 Cannot infer type for value parameter 'onComplete'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:358:44 Cannot infer type for type parameter 'A'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:358:44 Cannot infer type for type parameter 'B'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:358:44 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+fun <A, B> A.to(that: B): Pair<A, B>
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:359:17 Unresolved reference 'onComplete'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:361:34 Cannot infer type for value parameter 'calibrationId'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:361:49 Cannot infer type for value parameter 'role'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:361:55 Cannot infer type for value parameter 'profile'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:361:64 Cannot infer type for value parameter 'sampleCount'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:361:77 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:361:80 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:366:17 Unresolved reference 'ChirpCalibrationResult'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:382:20 Unresolved reference 'setNetworkRole'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:383:20 Unresolved reference 'onNearbyEvent'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:392:20 Unresolved reference 'onNearbyEvent'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:402:20 Unresolved reference 'startChirpSyncAllConnected'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:404:31 Unresolved reference 'uiState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:407:42 Cannot infer type for type parameter 'R'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:408:13 Unresolved reference 'SessionChirpCalibrationStartMessage'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:411:39 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:411:39 Cannot infer type for type parameter 'R'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:411:43 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:411:48 Unresolved reference 'calibrationId'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:411:64 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:412:49 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:412:57 Unresolved reference 'role'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:413:48 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:413:56 Unresolved reference 'profile'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:414:39 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:414:47 Unresolved reference 'sampleCount'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:415:37 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:415:45 Unresolved reference 'remoteSendElapsedNanos'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:417:36 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:417:44 Unresolved reference 'calibrationId'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:425:26 None of the following candidates is applicable:
+constructor(loadLastRun: suspend () -> LastRunResult?, saveLastRun: suspend (LastRunResult) -> Unit, sendMessage: (String, String, Function1<Result<Unit>, Unit>) -> Unit, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+constructor(localRepository: LocalRepository, nearbyConnectionsManager: NearbyConnectionsManager, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:428:29 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:428:32 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:428:35 Cannot infer type for value parameter 'onComplete'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:428:49 Unresolved reference 'onComplete'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:429:34 Cannot infer type for value parameter 'calibrationId'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:429:49 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:429:52 Cannot infer type for value parameter 'profile'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:429:61 Cannot infer type for value parameter 'sampleCount'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:429:74 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:429:77 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:430:17 Unresolved reference 'ChirpCalibrationResult'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:437:20 Unresolved reference 'setNetworkRole'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:438:20 Unresolved reference 'startChirpSyncAllConnected'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:440:79 Unresolved reference 'uiState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:441:32 Unresolved reference 'uiState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:446:26 None of the following candidates is applicable:
+constructor(loadLastRun: suspend () -> LastRunResult?, saveLastRun: suspend (LastRunResult) -> Unit, sendMessage: (String, String, Function1<Result<Unit>, Unit>) -> Unit, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+constructor(localRepository: LocalRepository, nearbyConnectionsManager: NearbyConnectionsManager, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:449:29 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:449:32 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:449:35 Cannot infer type for value parameter 'onComplete'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:449:49 Unresolved reference 'onComplete'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:450:34 Cannot infer type for value parameter 'calibrationId'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:450:49 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:450:52 Cannot infer type for value parameter 'profile'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:450:61 Cannot infer type for value parameter 'sampleCount'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:450:74 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:450:77 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:451:17 Unresolved reference 'ChirpCalibrationResult'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:458:20 Unresolved reference 'setNetworkRole'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:459:20 Unresolved reference 'onNearbyEvent'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:468:20 Unresolved reference 'onNearbyEvent'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:477:20 Unresolved reference 'assignRole'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:478:20 Unresolved reference 'setReconnectingToP2p'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:479:20 Unresolved reference 'onNearbyEvent'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:480:20 Unresolved reference 'onNearbyEvent'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:489:20 Unresolved reference 'onNearbyEvent'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:499:32 Unresolved reference 'uiState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:499:66 Unresolved reference 'it'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:500:31 Unresolved reference 'size'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:501:48 Unresolved reference 'id'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:502:60 Unresolved reference 'role'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:507:26 None of the following candidates is applicable:
+constructor(loadLastRun: suspend () -> LastRunResult?, saveLastRun: suspend (LastRunResult) -> Unit, sendMessage: (String, String, Function1<Result<Unit>, Unit>) -> Unit, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+constructor(localRepository: LocalRepository, nearbyConnectionsManager: NearbyConnectionsManager, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:510:29 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:510:32 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:510:35 Cannot infer type for value parameter 'onComplete'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:510:49 Unresolved reference 'onComplete'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:511:34 Cannot infer type for value parameter 'calibrationId'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:511:49 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:511:52 Cannot infer type for value parameter 'profile'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:511:61 Cannot infer type for value parameter 'sampleCount'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:511:74 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:511:77 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:512:17 Unresolved reference 'ChirpCalibrationResult'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:519:20 Unresolved reference 'setNetworkRole'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:520:20 Unresolved reference 'onNearbyEvent'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:529:20 Unresolved reference 'onNearbyEvent'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:538:20 Unresolved reference 'setReconnectingToP2p'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:539:20 Unresolved reference 'onNearbyEvent'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:548:20 Unresolved reference 'onNearbyEvent'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:558:34 Unresolved reference 'uiState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:558:68 Unresolved reference 'it'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:558:87 Unresolved reference 'it'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:564:26 None of the following candidates is applicable:
+constructor(loadLastRun: suspend () -> LastRunResult?, saveLastRun: suspend (LastRunResult) -> Unit, sendMessage: (String, String, Function1<Result<Unit>, Unit>) -> Unit, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+constructor(localRepository: LocalRepository, nearbyConnectionsManager: NearbyConnectionsManager, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:567:29 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:567:32 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:567:35 Cannot infer type for value parameter 'onComplete'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:567:49 Unresolved reference 'onComplete'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:568:34 Cannot infer type for value parameter 'calibrationId'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:568:49 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:568:52 Cannot infer type for value parameter 'profile'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:568:61 Cannot infer type for value parameter 'sampleCount'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:568:74 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:568:77 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:569:17 Unresolved reference 'ChirpCalibrationResult'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:576:20 Unresolved reference 'setNetworkRole'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:577:20 Unresolved reference 'onNearbyEvent'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:586:20 Unresolved reference 'setReconnectingToP2p'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:587:20 Unresolved reference 'onNearbyEvent'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:589:34 Unresolved reference 'uiState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:589:68 Unresolved reference 'it'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:589:87 Unresolved reference 'it'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:595:26 None of the following candidates is applicable:
+constructor(loadLastRun: suspend () -> LastRunResult?, saveLastRun: suspend (LastRunResult) -> Unit, sendMessage: (String, String, Function1<Result<Unit>, Unit>) -> Unit, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+constructor(localRepository: LocalRepository, nearbyConnectionsManager: NearbyConnectionsManager, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:598:29 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:598:32 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:598:35 Cannot infer type for value parameter 'onComplete'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:598:49 Unresolved reference 'onComplete'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:599:34 Cannot infer type for value parameter 'calibrationId'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:599:49 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:599:52 Cannot infer type for value parameter 'profile'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:599:61 Cannot infer type for value parameter 'sampleCount'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:599:74 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:599:77 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:600:17 Unresolved reference 'ChirpCalibrationResult'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:607:20 Unresolved reference 'setNetworkRole'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:608:20 Unresolved reference 'onNearbyEvent'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:617:20 Unresolved reference 'onNearbyEvent'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:626:20 Unresolved reference 'setReconnectingToP2p'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:627:20 Unresolved reference 'onNearbyEvent'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:629:20 Unresolved reference 'setReconnectingToP2p'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:631:34 Unresolved reference 'uiState'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:631:68 Unresolved reference 'it'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:631:87 Unresolved reference 'it'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:638:26 None of the following candidates is applicable:
+constructor(loadLastRun: suspend () -> LastRunResult?, saveLastRun: suspend (LastRunResult) -> Unit, sendMessage: (String, String, Function1<Result<Unit>, Unit>) -> Unit, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+constructor(localRepository: LocalRepository, nearbyConnectionsManager: NearbyConnectionsManager, ioDispatcher: CoroutineDispatcher = ..., nowElapsedNanos: () -> Long = ...): RaceSessionController
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:641:29 Cannot infer type for value parameter 'endpointId'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:641:41 Cannot infer type for value parameter 'messageJson'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:641:54 Cannot infer type for value parameter 'onComplete'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:642:44 Cannot infer type for type parameter 'A'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:642:44 Cannot infer type for type parameter 'B'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:642:44 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+fun <A, B> A.to(that: B): Pair<A, B>
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:643:17 Unresolved reference 'onComplete'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:645:34 Cannot infer type for value parameter 'calibrationId'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:645:49 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:645:52 Cannot infer type for value parameter 'profile'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:645:61 Cannot infer type for value parameter 'sampleCount'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:645:74 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:645:77 Cannot infer type for implicit value parameter 'it'. Specify it explicitly.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:646:17 Unresolved reference 'ChirpCalibrationResult'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:653:20 Unresolved reference 'setNetworkRole'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:654:20 Unresolved reference 'onNearbyEvent'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:663:20 Unresolved reference 'onNearbyEvent'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionControllerTest.kt:674:20 Unresolved reference 'onNearbyEvent'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionModelsTest.kt:73:19 Unresolved reference 'SessionChirpCalibrationStartMessage'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionModelsTest.kt:81:22 Unresolved reference 'SessionChirpCalibrationStartMessage'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionModelsTest.kt:90:19 Unresolved reference 'SessionChirpClearMessage'.
+e: file:///C:/Users/paul/projects/photo-finish/android/app/src/test/kotlin/com/paul/sprintsync/features/race_session/RaceSessionModelsTest.kt:92:22 Unresolved reference 'SessionChirpClearMessage'.
 
 FAILURE: Build failed with an exception.
 
 * What went wrong:
-Execution failed for task ':app:compileDebugKotlin'.
+Execution failed for task ':app:compileDebugUnitTestKotlin'.
 > A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
    > Compilation error. See log for more details
 
@@ -103,4 +400,4 @@ Execution failed for task ':app:compileDebugKotlin'.
 > Get more help at https://help.gradle.org.
 
 BUILD FAILED in 2s
-28 actionable tasks: 1 executed, 27 up-to-date
+17 actionable tasks: 1 executed, 16 up-to-date

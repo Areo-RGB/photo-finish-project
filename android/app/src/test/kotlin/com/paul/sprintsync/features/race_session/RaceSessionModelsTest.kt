@@ -94,4 +94,18 @@ class RaceSessionModelsTest {
         assertNotNull(parsed)
         assertNull(parsed?.calibrationId)
     }
+
+    @Test
+    fun `device identity message round-trips`() {
+        val original = SessionDeviceIdentityMessage(
+            stableDeviceId = "stable-device-1",
+            deviceName = "Pixel 8 Pro",
+        )
+
+        val parsed = SessionDeviceIdentityMessage.tryParse(original.toJsonString())
+
+        assertNotNull(parsed)
+        assertEquals("stable-device-1", parsed?.stableDeviceId)
+        assertEquals("Pixel 8 Pro", parsed?.deviceName)
+    }
 }

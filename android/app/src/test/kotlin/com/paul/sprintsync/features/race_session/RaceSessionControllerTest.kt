@@ -440,4 +440,248 @@ class RaceSessionControllerTest {
         assertEquals("Chirp sync ignored: no connected endpoints", controller.uiState.value.lastError)
         assertFalse(controller.uiState.value.chirpSyncInProgress)
     }
+
+    @Test
+    fun `reconnect with new endpoint id preserves assigned role after identity handshake`() = runTest {
+        val controller = RaceSessionController(
+            loadLastRun = { null },
+            saveLastRun = { },
+            sendMessage = { _, _, onComplete -> onComplete(Result.success(Unit)) },
+            startCalibration = { calibrationId, _, profile, sampleCount, _, _ ->
+                ChirpCalibrationResult(calibrationId, true, null, null, null, null, profile, sampleCount)
+            },
+            clearCalibration = { },
+            ioDispatcher = StandardTestDispatcher(testScheduler),
+            nowElapsedNanos = { 1L },
+        )
+
+        controller.setNetworkRole(SessionNetworkRole.HOST)
+        controller.onNearbyEvent(
+            NearbyEvent.ConnectionResult(
+                endpointId = "peer-old",
+                endpointName = "peer",
+                connected = true,
+                statusCode = 0,
+                statusMessage = null,
+            ),
+        )
+        controller.onNearbyEvent(
+            NearbyEvent.PayloadReceived(
+                endpointId = "peer-old",
+                message = SessionDeviceIdentityMessage(
+                    stableDeviceId = "stable-peer",
+                    deviceName = "peer",
+                ).toJsonString(),
+            ),
+        )
+        controller.assignRole("peer-old", SessionDeviceRole.STOP)
+        controller.setReconnectingToP2p(true)
+        controller.onNearbyEvent(NearbyEvent.EndpointDisconnected(endpointId = "peer-old"))
+        controller.onNearbyEvent(
+            NearbyEvent.ConnectionResult(
+                endpointId = "peer-new",
+                endpointName = "peer",
+                connected = true,
+                statusCode = 0,
+                statusMessage = null,
+            ),
+        )
+        controller.onNearbyEvent(
+            NearbyEvent.PayloadReceived(
+                endpointId = "peer-new",
+                message = SessionDeviceIdentityMessage(
+                    stableDeviceId = "stable-peer",
+                    deviceName = "peer",
+                ).toJsonString(),
+            ),
+        )
+
+        val peers = controller.uiState.value.devices.filterNot { it.isLocal }
+        assertEquals(1, peers.size)
+        assertEquals("peer-new", peers.first().id)
+        assertEquals(SessionDeviceRole.STOP, peers.first().role)
+    }
+
+    @Test
+    fun `identity reconciliation updates endpoint without duplicating peer rows`() = runTest {
+        val controller = RaceSessionController(
+            loadLastRun = { null },
+            saveLastRun = { },
+            sendMessage = { _, _, onComplete -> onComplete(Result.success(Unit)) },
+            startCalibration = { calibrationId, _, profile, sampleCount, _, _ ->
+                ChirpCalibrationResult(calibrationId, true, null, null, null, null, profile, sampleCount)
+            },
+            clearCalibration = { },
+            ioDispatcher = StandardTestDispatcher(testScheduler),
+            nowElapsedNanos = { 1L },
+        )
+
+        controller.setNetworkRole(SessionNetworkRole.HOST)
+        controller.onNearbyEvent(
+            NearbyEvent.ConnectionResult(
+                endpointId = "peer-old",
+                endpointName = "peer",
+                connected = true,
+                statusCode = 0,
+                statusMessage = null,
+            ),
+        )
+        controller.onNearbyEvent(
+            NearbyEvent.PayloadReceived(
+                endpointId = "peer-old",
+                message = SessionDeviceIdentityMessage(
+                    stableDeviceId = "stable-peer",
+                    deviceName = "peer",
+                ).toJsonString(),
+            ),
+        )
+        controller.setReconnectingToP2p(true)
+        controller.onNearbyEvent(
+            NearbyEvent.ConnectionResult(
+                endpointId = "peer-new",
+                endpointName = "peer",
+                connected = true,
+                statusCode = 0,
+                statusMessage = null,
+            ),
+        )
+        controller.onNearbyEvent(
+            NearbyEvent.PayloadReceived(
+                endpointId = "peer-new",
+                message = SessionDeviceIdentityMessage(
+                    stableDeviceId = "stable-peer",
+                    deviceName = "peer",
+                ).toJsonString(),
+            ),
+        )
+
+        val peerIds = controller.uiState.value.devices.filterNot { it.isLocal }.map { it.id }
+        assertEquals(listOf("peer-new"), peerIds)
+    }
+
+    @Test
+    fun `reconnect mode keeps disconnected peers until reconnect ends`() = runTest {
+        val controller = RaceSessionController(
+            loadLastRun = { null },
+            saveLastRun = { },
+            sendMessage = { _, _, onComplete -> onComplete(Result.success(Unit)) },
+            startCalibration = { calibrationId, _, profile, sampleCount, _, _ ->
+                ChirpCalibrationResult(calibrationId, true, null, null, null, null, profile, sampleCount)
+            },
+            clearCalibration = { },
+            ioDispatcher = StandardTestDispatcher(testScheduler),
+            nowElapsedNanos = { 1L },
+        )
+
+        controller.setNetworkRole(SessionNetworkRole.HOST)
+        controller.onNearbyEvent(
+            NearbyEvent.ConnectionResult(
+                endpointId = "peer-1",
+                endpointName = "peer",
+                connected = true,
+                statusCode = 0,
+                statusMessage = null,
+            ),
+        )
+        controller.setReconnectingToP2p(true)
+        controller.onNearbyEvent(NearbyEvent.EndpointDisconnected(endpointId = "peer-1"))
+
+        val peerIds = controller.uiState.value.devices.filterNot { it.isLocal }.map { it.id }
+        assertEquals(listOf("peer-1"), peerIds)
+    }
+
+    @Test
+    fun `reconnect mode false prunes all non connected peers`() = runTest {
+        val controller = RaceSessionController(
+            loadLastRun = { null },
+            saveLastRun = { },
+            sendMessage = { _, _, onComplete -> onComplete(Result.success(Unit)) },
+            startCalibration = { calibrationId, _, profile, sampleCount, _, _ ->
+                ChirpCalibrationResult(calibrationId, true, null, null, null, null, profile, sampleCount)
+            },
+            clearCalibration = { },
+            ioDispatcher = StandardTestDispatcher(testScheduler),
+            nowElapsedNanos = { 1L },
+        )
+
+        controller.setNetworkRole(SessionNetworkRole.HOST)
+        controller.onNearbyEvent(
+            NearbyEvent.ConnectionResult(
+                endpointId = "peer-1",
+                endpointName = "peer-1",
+                connected = true,
+                statusCode = 0,
+                statusMessage = null,
+            ),
+        )
+        controller.onNearbyEvent(
+            NearbyEvent.ConnectionResult(
+                endpointId = "peer-2",
+                endpointName = "peer-2",
+                connected = true,
+                statusCode = 0,
+                statusMessage = null,
+            ),
+        )
+        controller.setReconnectingToP2p(true)
+        controller.onNearbyEvent(NearbyEvent.EndpointDisconnected(endpointId = "peer-1"))
+
+        controller.setReconnectingToP2p(false)
+
+        val peerIds = controller.uiState.value.devices.filterNot { it.isLocal }.map { it.id }
+        assertEquals(listOf("peer-2"), peerIds)
+    }
+
+    @Test
+    fun `host snapshot after prune includes only local and connected peers`() = runTest {
+        val sentMessages = mutableListOf<Pair<String, String>>()
+        val controller = RaceSessionController(
+            loadLastRun = { null },
+            saveLastRun = { },
+            sendMessage = { endpointId, messageJson, onComplete ->
+                sentMessages += endpointId to messageJson
+                onComplete(Result.success(Unit))
+            },
+            startCalibration = { calibrationId, _, profile, sampleCount, _, _ ->
+                ChirpCalibrationResult(calibrationId, true, null, null, null, null, profile, sampleCount)
+            },
+            clearCalibration = { },
+            ioDispatcher = StandardTestDispatcher(testScheduler),
+            nowElapsedNanos = { 1L },
+        )
+
+        controller.setNetworkRole(SessionNetworkRole.HOST)
+        controller.onNearbyEvent(
+            NearbyEvent.ConnectionResult(
+                endpointId = "peer-1",
+                endpointName = "peer-1",
+                connected = true,
+                statusCode = 0,
+                statusMessage = null,
+            ),
+        )
+        controller.onNearbyEvent(
+            NearbyEvent.ConnectionResult(
+                endpointId = "peer-2",
+                endpointName = "peer-2",
+                connected = true,
+                statusCode = 0,
+                statusMessage = null,
+            ),
+        )
+
+        sentMessages.clear()
+        controller.onNearbyEvent(NearbyEvent.EndpointDisconnected(endpointId = "peer-2"))
+
+        val latestSnapshotToPeer1 = sentMessages
+            .filter { it.first == "peer-1" }
+            .mapNotNull { (_, raw) -> SessionSnapshotMessage.tryParse(raw) }
+            .lastOrNull()
+
+        assertNotNull(latestSnapshotToPeer1)
+        val snapshotDeviceIds = latestSnapshotToPeer1!!.devices.map { it.id }.toSet()
+        assertTrue(snapshotDeviceIds.contains("local-device"))
+        assertTrue(snapshotDeviceIds.contains("peer-1"))
+        assertFalse(snapshotDeviceIds.contains("peer-2"))
+    }
 }

@@ -104,6 +104,8 @@ class RaceSessionController(
     private val pendingClockSyncSamplesByClientSendNanos = mutableMapOf<Long, Long>()
     private val acceptedClockOffsetSamples = mutableListOf<Long>()
     private val acceptedClockRoundTripSamples = mutableListOf<Long>()
+    private val endpointIdByStableDeviceId = mutableMapOf<String, String>()
+    private val stableDeviceIdByEndpointId = mutableMapOf<String, String>()
 
     private var localDeviceId = DEFAULT_LOCAL_DEVICE_ID
 
@@ -167,6 +169,8 @@ class RaceSessionController(
     }
 
     fun setNetworkRole(role: SessionNetworkRole) {
+        endpointIdByStableDeviceId.clear()
+        stableDeviceIdByEndpointId.clear()
         val local = ensureLocalDevice(
             SessionDevice(
                 id = localDeviceId,
@@ -216,12 +220,22 @@ class RaceSessionController(
             }
 
             is NearbyEvent.EndpointDisconnected -> {
+                if (!_uiState.value.isReconnectingToP2p) {
+                    clearIdentityMappingForEndpoint(event.endpointId)
+                }
                 val nextConnected = _uiState.value.connectedEndpoints - event.endpointId
-                val nextDevices = _uiState.value.devices.filterNot { it.id == event.endpointId }
-                
+                val nextDevices = ensureLocalDevice(
+                    localDeviceFromState(),
+                    pruneOrphanedNonLocalDevices(
+                        devices = _uiState.value.devices,
+                        connectedEndpoints = nextConnected,
+                        isReconnectingToP2p = _uiState.value.isReconnectingToP2p,
+                    ),
+                )
+
                 var nextStage = _uiState.value.stage
                 var nextRole = _uiState.value.networkRole
-                
+
                 if (_uiState.value.networkRole == SessionNetworkRole.CLIENT && nextConnected.isEmpty()) {
                     if (!_uiState.value.isReconnectingToP2p) {
                         nextStage = SessionStage.SETUP
@@ -231,9 +245,10 @@ class RaceSessionController(
 
                 _uiState.value = _uiState.value.copy(
                     connectedEndpoints = nextConnected,
-                    devices = ensureLocalDevice(localDeviceFromState(), nextDevices),
+                    devices = nextDevices,
                     stage = nextStage,
                     networkRole = nextRole,
+                    deviceRole = localDeviceRole(),
                     lastEvent = "endpoint_disconnected",
                 )
                 if (_uiState.value.networkRole == SessionNetworkRole.HOST) {
@@ -447,7 +462,23 @@ class RaceSessionController(
     }
 
     fun setReconnectingToP2p(reconnecting: Boolean) {
-        _uiState.value = _uiState.value.copy(isReconnectingToP2p = reconnecting)
+        if (reconnecting) {
+            _uiState.value = _uiState.value.copy(isReconnectingToP2p = true)
+            return
+        }
+        val prunedDevices = ensureLocalDevice(
+            localDeviceFromState(),
+            pruneOrphanedNonLocalDevices(
+                devices = _uiState.value.devices,
+                connectedEndpoints = _uiState.value.connectedEndpoints,
+                isReconnectingToP2p = false,
+            ),
+        )
+        _uiState.value = _uiState.value.copy(
+            isReconnectingToP2p = false,
+            devices = prunedDevices,
+            deviceRole = localDeviceRole(),
+        )
     }
 
     fun startClockSyncBurst(endpointId: String, sampleCount: Int = DEFAULT_CLOCK_SYNC_SAMPLE_COUNT) {
@@ -635,6 +666,11 @@ class RaceSessionController(
     }
 
     private fun handleIncomingPayload(endpointId: String, rawMessage: String) {
+        SessionDeviceIdentityMessage.tryParse(rawMessage)?.let { identity ->
+            handleDeviceIdentity(endpointId, identity)
+            return
+        }
+
         SessionSwitchToP2pMessage.tryParse(rawMessage)?.let {
             _uiState.value = _uiState.value.copy(isReconnectingToP2p = true, lastEvent = "switch_to_p2p")
             return
@@ -692,25 +728,58 @@ class RaceSessionController(
         } else {
             _uiState.value.connectedEndpoints - event.endpointId
         }
+        if (!event.connected && !_uiState.value.isReconnectingToP2p) {
+            clearIdentityMappingForEndpoint(event.endpointId)
+        }
         val nextDevices = if (event.connected) {
             val endpointName = event.endpointName
                 ?: _uiState.value.discoveredEndpoints[event.endpointId]
                 ?: event.endpointId
+            val knownStableDeviceId = stableDeviceIdByEndpointId[event.endpointId]
+            val stableEndpoint = knownStableDeviceId?.let { endpointIdByStableDeviceId[it] }
+            val stableEntry = stableEndpoint?.let { stableId ->
+                _uiState.value.devices.firstOrNull { existing -> !existing.isLocal && existing.id == stableId }
+            }
+            val existingForEndpoint = _uiState.value.devices.firstOrNull { existing ->
+                !existing.isLocal && existing.id == event.endpointId
+            }
+            val preserved = stableEntry ?: existingForEndpoint
+            val reconciled = (preserved ?: SessionDevice(
+                id = event.endpointId,
+                name = endpointName,
+                role = SessionDeviceRole.UNASSIGNED,
+                isLocal = false,
+            )).copy(
+                id = event.endpointId,
+                name = endpointName,
+                isLocal = false,
+            )
+            val dedupedDevices = _uiState.value.devices.filterNot { existing ->
+                !existing.isLocal && (
+                    existing.id == event.endpointId ||
+                        (stableEndpoint != null && stableEndpoint != event.endpointId && existing.id == stableEndpoint)
+                    )
+            } + reconciled
             ensureLocalDevice(
                 localDeviceFromState(),
-                _uiState.value.devices + SessionDevice(
-                    id = event.endpointId,
-                    name = endpointName,
-                    role = SessionDeviceRole.UNASSIGNED,
-                    isLocal = false,
+                pruneOrphanedNonLocalDevices(
+                    devices = dedupedDevices,
+                    connectedEndpoints = nextConnected,
+                    isReconnectingToP2p = _uiState.value.isReconnectingToP2p,
                 ),
             )
         } else {
             ensureLocalDevice(
                 localDeviceFromState(),
-                _uiState.value.devices.filterNot { it.id == event.endpointId },
+                pruneOrphanedNonLocalDevices(
+                    devices = _uiState.value.devices,
+                    connectedEndpoints = nextConnected,
+                    isReconnectingToP2p = _uiState.value.isReconnectingToP2p,
+                ),
             )
         }
+
+        val nextIsReconnecting = if (event.connected && _uiState.value.isReconnectingToP2p) false else _uiState.value.isReconnectingToP2p
 
         _uiState.value = _uiState.value.copy(
             connectedEndpoints = nextConnected,
@@ -718,8 +787,12 @@ class RaceSessionController(
             deviceRole = localDeviceRole(),
             lastError = if (event.connected) null else (event.statusMessage ?: "Connection failed"),
             lastEvent = "connection_result",
+            isReconnectingToP2p = nextIsReconnecting,
         )
 
+        if (event.connected) {
+            sendIdentityHandshake(event.endpointId)
+        }
         if (_uiState.value.networkRole == SessionNetworkRole.HOST) {
             broadcastSnapshotIfHost()
         }
@@ -971,11 +1044,26 @@ class RaceSessionController(
             return
         }
         val targetEndpoints = _uiState.value.connectedEndpoints
+        val canonicalDevices = ensureLocalDevice(
+            localDeviceFromState(),
+            pruneOrphanedNonLocalDevices(
+                devices = _uiState.value.devices,
+                connectedEndpoints = targetEndpoints,
+                isReconnectingToP2p = _uiState.value.isReconnectingToP2p,
+            ),
+        )
+        if (canonicalDevices != _uiState.value.devices) {
+            _uiState.value = _uiState.value.copy(
+                devices = canonicalDevices,
+                deviceRole = localDeviceRole(),
+            )
+        }
+        val devicesForSnapshot = _uiState.value.devices
         targetEndpoints.forEach { endpointId ->
             val payload = SessionSnapshotMessage(
                 stage = _uiState.value.stage,
                 monitoringActive = _uiState.value.monitoringActive,
-                devices = _uiState.value.devices,
+                devices = devicesForSnapshot,
                 hostStartSensorNanos = _uiState.value.timeline.hostStartSensorNanos,
                 hostSplitSensorNanos = _uiState.value.timeline.hostSplitSensorNanos,
                 hostStopSensorNanos = _uiState.value.timeline.hostStopSensorNanos,
@@ -1015,6 +1103,96 @@ class RaceSessionController(
                     lastError = "send failed ($hostEndpointId): ${error.localizedMessage ?: "unknown"}",
                 )
             }
+        }
+    }
+
+    private fun sendIdentityHandshake(endpointId: String) {
+        val payload = SessionDeviceIdentityMessage(
+            stableDeviceId = localDeviceId,
+            deviceName = localDeviceName(),
+        ).toJsonString()
+        sendMessage(endpointId, payload) { result ->
+            result.exceptionOrNull()?.let { error ->
+                _uiState.value = _uiState.value.copy(
+                    lastError = "identity send failed ($endpointId): ${error.localizedMessage ?: "unknown"}",
+                )
+            }
+        }
+    }
+
+    private fun handleDeviceIdentity(endpointId: String, identity: SessionDeviceIdentityMessage) {
+        val previousEndpointId = endpointIdByStableDeviceId[identity.stableDeviceId]
+        mapStableIdentityToEndpoint(identity.stableDeviceId, endpointId)
+
+        val current = _uiState.value
+        val preservedDevice = current.devices.firstOrNull { existing ->
+            !existing.isLocal && (
+                existing.id == endpointId ||
+                    (previousEndpointId != null && previousEndpointId != endpointId && existing.id == previousEndpointId)
+                )
+        }
+        val reconciledDevice = (preservedDevice ?: SessionDevice(
+            id = endpointId,
+            name = identity.deviceName,
+            role = SessionDeviceRole.UNASSIGNED,
+            isLocal = false,
+        )).copy(
+            id = endpointId,
+            name = identity.deviceName,
+            isLocal = false,
+        )
+        val dedupedDevices = current.devices.filterNot { existing ->
+            !existing.isLocal && (
+                existing.id == endpointId ||
+                    (previousEndpointId != null && previousEndpointId != endpointId && existing.id == previousEndpointId)
+                )
+        } + reconciledDevice
+        val nextDevices = ensureLocalDevice(
+            localDeviceFromState(),
+            pruneOrphanedNonLocalDevices(
+                devices = dedupedDevices,
+                connectedEndpoints = current.connectedEndpoints,
+                isReconnectingToP2p = current.isReconnectingToP2p,
+            ),
+        )
+        _uiState.value = current.copy(
+            devices = nextDevices,
+            deviceRole = localDeviceRole(),
+            lastEvent = "device_identity",
+        )
+        if (_uiState.value.networkRole == SessionNetworkRole.HOST) {
+            broadcastSnapshotIfHost()
+        }
+    }
+
+    private fun mapStableIdentityToEndpoint(stableDeviceId: String, endpointId: String) {
+        val previousForStableDevice = endpointIdByStableDeviceId.put(stableDeviceId, endpointId)
+        if (previousForStableDevice != null && previousForStableDevice != endpointId) {
+            stableDeviceIdByEndpointId.remove(previousForStableDevice)
+        }
+        val previousStableForEndpoint = stableDeviceIdByEndpointId.put(endpointId, stableDeviceId)
+        if (previousStableForEndpoint != null && previousStableForEndpoint != stableDeviceId) {
+            endpointIdByStableDeviceId.remove(previousStableForEndpoint)
+        }
+    }
+
+    private fun clearIdentityMappingForEndpoint(endpointId: String) {
+        val stableDeviceId = stableDeviceIdByEndpointId.remove(endpointId) ?: return
+        if (endpointIdByStableDeviceId[stableDeviceId] == endpointId) {
+            endpointIdByStableDeviceId.remove(stableDeviceId)
+        }
+    }
+
+    private fun pruneOrphanedNonLocalDevices(
+        devices: List<SessionDevice>,
+        connectedEndpoints: Set<String>,
+        isReconnectingToP2p: Boolean,
+    ): List<SessionDevice> {
+        if (isReconnectingToP2p) {
+            return devices
+        }
+        return devices.filter { device ->
+            device.isLocal || connectedEndpoints.contains(device.id)
         }
     }
 

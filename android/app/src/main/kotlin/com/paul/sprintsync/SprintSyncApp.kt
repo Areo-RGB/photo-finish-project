@@ -560,7 +560,6 @@ private fun NativePreviewCard(
     previewViewFactory: SensorNativePreviewViewFactory,
     roiCenterX: Double,
 ) {
-    var previewViewRef by remember { mutableStateOf<PreviewView?>(null) }
     Card {
         Box(
             modifier = Modifier
@@ -576,8 +575,11 @@ private fun NativePreviewCard(
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
                     factory = { context ->
-                        previewViewFactory.createPreviewView(context).also { previewViewRef = it }
+                        previewViewFactory.createPreviewView(context)
                     },
+                    onRelease = { view ->
+                        previewViewFactory.detachPreviewView(view)
+                    }
                 )
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val normalized = roiCenterX.coerceIn(0.0, 1.0).toFloat()
@@ -590,12 +592,6 @@ private fun NativePreviewCard(
                     )
                 }
             }
-        }
-    }
-    androidx.compose.runtime.DisposableEffect(previewViewRef) {
-        onDispose {
-            previewViewRef?.let(previewViewFactory::detachPreviewView)
-            previewViewRef = null
         }
     }
 }
