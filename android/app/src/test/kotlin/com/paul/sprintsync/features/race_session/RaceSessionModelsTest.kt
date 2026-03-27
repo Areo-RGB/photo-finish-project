@@ -66,30 +66,33 @@ class RaceSessionModelsTest {
     }
 
     @Test
-    fun `chirp calibration start parser clamps sample count to minimum`() {
-        val raw = SessionChirpCalibrationStartMessage(
-            calibrationId = "cal-1",
-            role = "responder",
-            profile = "fallback",
-            sampleCount = 1,
-            remoteSendElapsedNanos = 123L,
-        ).toJsonString()
+    fun `clock sync request and response round-trip`() {
+        val request = SessionClockSyncRequestMessage(clientSendElapsedNanos = 100L)
+        val response = SessionClockSyncResponseMessage(
+            clientSendElapsedNanos = 100L,
+            hostReceiveElapsedNanos = 220L,
+            hostSendElapsedNanos = 260L,
+        )
 
-        val parsed = SessionChirpCalibrationStartMessage.tryParse(raw)
+        val parsedRequest = SessionClockSyncRequestMessage.tryParse(request.toJsonString())
+        val parsedResponse = SessionClockSyncResponseMessage.tryParse(response.toJsonString())
 
-        assertNotNull(parsed)
-        assertEquals(3, parsed?.sampleCount)
-        assertEquals(123L, parsed?.remoteSendElapsedNanos)
+        assertNotNull(parsedRequest)
+        assertEquals(100L, parsedRequest?.clientSendElapsedNanos)
+        assertNotNull(parsedResponse)
+        assertEquals(220L, parsedResponse?.hostReceiveElapsedNanos)
+        assertEquals(260L, parsedResponse?.hostSendElapsedNanos)
     }
 
     @Test
-    fun `chirp clear parser accepts null calibration id`() {
-        val raw = SessionChirpClearMessage(calibrationId = null).toJsonString()
+    fun `trigger refinement parser rejects missing run id`() {
+        val invalid = """
+            {"type":"trigger_refinement","runId":"","role":"start","provisionalHostSensorNanos":1,"refinedHostSensorNanos":2}
+        """.trimIndent()
 
-        val parsed = SessionChirpClearMessage.tryParse(raw)
+        val parsed = SessionTriggerRefinementMessage.tryParse(invalid)
 
-        assertNotNull(parsed)
-        assertNull(parsed?.calibrationId)
+        assertNull(parsed)
     }
 
     @Test
