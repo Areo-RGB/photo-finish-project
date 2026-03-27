@@ -8,6 +8,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -464,54 +465,112 @@ private fun MonitoringSummaryCard(
     }
 
     SprintSyncCard {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    "Role: ${sessionDeviceRoleLabel(localRole)}",
-                    fontWeight = FontWeight.Bold,
-                )
-                if (isHost) {
-                    TextButton(onClick = onResetRun) {
-                        Text("Reset")
-                    }
-                } else {
-                    Text("Waiting for host...", color = Color.Gray, fontStyle = FontStyle.Italic)
-                }
-            }
-            Text("Connection: $connectionTypeLabel", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-            Text("Sync: $syncModeLabel · Latency: $latencyLabel", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("Preview", style = MaterialTheme.typography.bodySmall)
-                Spacer(Modifier.width(8.dp))
-                Switch(
-                    checked = effectiveShowPreview,
-                    enabled = previewAvailable,
-                    onCheckedChange = onShowPreviewChanged,
-                )
-                if (!previewAvailable) {
-                    Spacer(Modifier.width(8.dp))
-                    Text("Disabled in HS", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            if (effectiveShowPreview) {
-                Box(
-                    modifier = Modifier
-                        .padding(top = 4.dp)
-                        .fillMaxWidth(),
-                    contentAlignment = Alignment.Center,
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val useTwoColumns = maxWidth >= 340.dp
+
+            if (useTwoColumns) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.Top,
                 ) {
                     PreviewSurface(
                         previewViewFactory = previewViewFactory,
                         roiCenterX = roiCenterX,
                     )
+                    MonitoringPreviewInfoPanel(
+                        isHost = isHost,
+                        localRole = localRole,
+                        connectionTypeLabel = connectionTypeLabel,
+                        syncModeLabel = syncModeLabel,
+                        latencyLabel = latencyLabel,
+                        previewAvailable = previewAvailable,
+                        effectiveShowPreview = effectiveShowPreview,
+                        onShowPreviewChanged = onShowPreviewChanged,
+                        onResetRun = onResetRun,
+                        modifier = Modifier.weight(1f),
+                    )
                 }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    MonitoringPreviewInfoPanel(
+                        isHost = isHost,
+                        localRole = localRole,
+                        connectionTypeLabel = connectionTypeLabel,
+                        syncModeLabel = syncModeLabel,
+                        latencyLabel = latencyLabel,
+                        previewAvailable = previewAvailable,
+                        effectiveShowPreview = effectiveShowPreview,
+                        onShowPreviewChanged = onShowPreviewChanged,
+                        onResetRun = onResetRun,
+                    )
+                    if (effectiveShowPreview) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            PreviewSurface(
+                                previewViewFactory = previewViewFactory,
+                                roiCenterX = roiCenterX,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MonitoringPreviewInfoPanel(
+    isHost: Boolean,
+    localRole: SessionDeviceRole,
+    connectionTypeLabel: String,
+    syncModeLabel: String,
+    latencyLabel: String,
+    previewAvailable: Boolean,
+    effectiveShowPreview: Boolean,
+    onShowPreviewChanged: (Boolean) -> Unit,
+    onResetRun: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "Role: ${sessionDeviceRoleLabel(localRole)}",
+                fontWeight = FontWeight.Bold,
+            )
+            if (isHost) {
+                TextButton(onClick = onResetRun) {
+                    Text("Reset")
+                }
+            } else {
+                Text("Waiting for host...", color = Color.Gray, fontStyle = FontStyle.Italic)
+            }
+        }
+        Text("Connection: $connectionTypeLabel", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+        Text("Sync: $syncModeLabel · Latency: $latencyLabel", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Preview", style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.width(8.dp))
+            Switch(
+                checked = effectiveShowPreview,
+                enabled = previewAvailable,
+                onCheckedChange = onShowPreviewChanged,
+            )
+            if (!previewAvailable) {
+                Spacer(Modifier.width(8.dp))
+                Text("Disabled in HS", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
