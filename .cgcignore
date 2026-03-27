@@ -39,3 +39,17 @@ app.*.map.json
 /android/app/release
 .gitnexus
 .serena/memories/
+
+# CodeGraphContext repo-specific noise filters
+/android/.gradle/
+/android/.kotlin/
+/android/build/
+/android/app/build/
+/android/local.properties
+/android/compile_log.txt
+/.agents/
+/.claude/
+/.serena/
+/.vscode/
+*.apk
+*.aab

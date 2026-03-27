@@ -86,7 +86,7 @@ class SprintSyncAppLayoutLogicTest {
     fun `display time font clamp respects row height budget`() {
         val density = Density(1f)
         val clamped = clampDisplayTimeFont(base = 128.sp, rowHeight = 120.dp, density = density)
-        assertTrue(clamped.value <= 69.6f)
+        assertTrue(clamped.value <= 88.8f)
     }
 
     @Test

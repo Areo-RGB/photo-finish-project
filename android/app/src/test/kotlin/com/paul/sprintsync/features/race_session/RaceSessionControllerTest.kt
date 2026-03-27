@@ -17,22 +17,41 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class RaceSessionControllerTest {
     @Test
-    fun `clock sync burst computes lock from accepted samples`() {
-        var now = 10_000_000_000L
-        val sentMessages = mutableListOf<String>()
+    fun `clock sync burst selects minimum RTT sample and breaks ties by earliest accepted`() {
+        val scriptedNow = ArrayDeque(
+            listOf(
+                1_000L,
+                2_000L,
+                3_000L,
+                5_000L,
+                6_000L,
+                9_000L,
+                10_000L,
+            ),
+        )
+        var fallbackNow = 10_000L
+        val sentPayloads = mutableListOf<ByteArray>()
 
         val controller = RaceSessionController(
             loadLastRun = { null },
             saveLastRun = { },
-            sendMessage = { _, messageJson, onComplete ->
-                sentMessages += messageJson
+            sendMessage = { _, _, onComplete ->
+                onComplete(Result.success(Unit))
+            },
+            sendClockSyncPayload = { _, payloadBytes, onComplete ->
+                sentPayloads += payloadBytes
                 onComplete(Result.success(Unit))
             },
             ioDispatcher = Dispatchers.Unconfined,
             nowElapsedNanos = {
-                now += 1_000_000L
-                now
+                if (scriptedNow.isEmpty()) {
+                    fallbackNow += 1_000L
+                    fallbackNow
+                } else {
+                    scriptedNow.removeFirst()
+                }
             },
+            clockSyncDelay = { _ -> },
         )
 
         controller.onNearbyEvent(
@@ -48,26 +67,121 @@ class RaceSessionControllerTest {
         controller.startClockSyncBurst(endpointId = "ep-1", sampleCount = 3)
         assertTrue(controller.uiState.value.clockSyncInProgress)
 
-        val requests = sentMessages.mapNotNull { SessionClockSyncRequestMessage.tryParse(it) }
+        val requests = sentPayloads.mapNotNull { SessionClockSyncBinaryCodec.decodeRequest(it) }
         assertEquals(3, requests.size)
 
-        requests.forEach { request ->
-            val response = SessionClockSyncResponseMessage(
-                clientSendElapsedNanos = request.clientSendElapsedNanos,
-                hostReceiveElapsedNanos = request.clientSendElapsedNanos + 200_000L,
-                hostSendElapsedNanos = request.clientSendElapsedNanos + 250_000L,
-            )
-            controller.onNearbyEvent(
-                NearbyEvent.PayloadReceived(
-                    endpointId = "ep-1",
-                    message = response.toJsonString(),
-                ),
-            )
-        }
+        val request1 = requests[0]
+        val request2 = requests[1]
+        val request3 = requests[2]
+
+        val response2 = SessionClockSyncBinaryResponse(
+            clientSendElapsedNanos = request2.clientSendElapsedNanos,
+            hostReceiveElapsedNanos = request2.clientSendElapsedNanos + 100L,
+            hostSendElapsedNanos = request2.clientSendElapsedNanos + 310L,
+        )
+        val response3 = SessionClockSyncBinaryResponse(
+            clientSendElapsedNanos = request3.clientSendElapsedNanos,
+            hostReceiveElapsedNanos = request3.clientSendElapsedNanos + 100L,
+            hostSendElapsedNanos = request3.clientSendElapsedNanos + 510L,
+        )
+        val response1 = SessionClockSyncBinaryResponse(
+            clientSendElapsedNanos = request1.clientSendElapsedNanos,
+            hostReceiveElapsedNanos = request1.clientSendElapsedNanos + 100L,
+            hostSendElapsedNanos = request1.clientSendElapsedNanos + 310L,
+        )
+
+        controller.onNearbyEvent(
+            NearbyEvent.ClockSyncSampleReceived(
+                endpointId = "ep-1",
+                sample = response2,
+            ),
+        )
+        controller.onNearbyEvent(
+            NearbyEvent.ClockSyncSampleReceived(
+                endpointId = "ep-1",
+                sample = response3,
+            ),
+        )
+        controller.onNearbyEvent(
+            NearbyEvent.ClockSyncSampleReceived(
+                endpointId = "ep-1",
+                sample = response1,
+            ),
+        )
 
         assertFalse(controller.uiState.value.clockSyncInProgress)
         assertNotNull(controller.clockState.value.hostMinusClientElapsedNanos)
+        assertEquals(-1_295L, controller.clockState.value.hostMinusClientElapsedNanos)
+        assertEquals(3_000L, controller.clockState.value.hostClockRoundTripNanos)
         assertTrue(controller.hasFreshClockLock())
+        assertEquals("clock_sync_complete", controller.uiState.value.lastEvent)
+    }
+
+    @Test
+    fun `clock sync burst staggers sends by 50ms and finishes only after all pending samples resolve`() {
+        var now = 10_000L
+        val sentPayloads = mutableListOf<ByteArray>()
+        val delayCalls = mutableListOf<Long>()
+
+        val controller = RaceSessionController(
+            loadLastRun = { null },
+            saveLastRun = { },
+            sendMessage = { _, _, onComplete -> onComplete(Result.success(Unit)) },
+            sendClockSyncPayload = { _, payloadBytes, onComplete ->
+                sentPayloads += payloadBytes
+                onComplete(Result.success(Unit))
+            },
+            ioDispatcher = Dispatchers.Unconfined,
+            nowElapsedNanos = {
+                now += 1_000L
+                now
+            },
+            clockSyncDelay = { delayCalls += it },
+        )
+
+        controller.onNearbyEvent(
+            NearbyEvent.ConnectionResult(
+                endpointId = "ep-1",
+                endpointName = "peer",
+                connected = true,
+                statusCode = 0,
+                statusMessage = null,
+            ),
+        )
+        controller.startClockSyncBurst(endpointId = "ep-1", sampleCount = 4)
+
+        assertEquals(listOf(50L, 50L, 50L), delayCalls)
+        val requests = sentPayloads.mapNotNull { SessionClockSyncBinaryCodec.decodeRequest(it) }
+        assertEquals(4, requests.size)
+        assertTrue(controller.uiState.value.clockSyncInProgress)
+
+        requests.take(3).forEach { request ->
+            controller.onNearbyEvent(
+                NearbyEvent.ClockSyncSampleReceived(
+                    endpointId = "ep-1",
+                    sample = SessionClockSyncBinaryResponse(
+                        clientSendElapsedNanos = request.clientSendElapsedNanos,
+                        hostReceiveElapsedNanos = request.clientSendElapsedNanos + 100L,
+                        hostSendElapsedNanos = request.clientSendElapsedNanos + 200L,
+                    ),
+                ),
+            )
+        }
+        assertTrue(controller.uiState.value.clockSyncInProgress)
+
+        val lastRequest = requests.last()
+        controller.onNearbyEvent(
+            NearbyEvent.ClockSyncSampleReceived(
+                endpointId = "ep-1",
+                sample = SessionClockSyncBinaryResponse(
+                    clientSendElapsedNanos = lastRequest.clientSendElapsedNanos,
+                    hostReceiveElapsedNanos = lastRequest.clientSendElapsedNanos + 100L,
+                    hostSendElapsedNanos = lastRequest.clientSendElapsedNanos + 200L,
+                ),
+            ),
+        )
+
+        assertFalse(controller.uiState.value.clockSyncInProgress)
         assertEquals("clock_sync_complete", controller.uiState.value.lastEvent)
     }
 
@@ -202,14 +316,14 @@ class RaceSessionControllerTest {
         val controller = RaceSessionController(
             loadLastRun = { null },
             saveLastRun = { },
-            sendMessage = { _, messageJson, onComplete ->
-                if (SessionClockSyncRequestMessage.tryParse(messageJson) != null) {
-                    sentClockSyncRequests.incrementAndGet()
-                }
+            sendMessage = { _, _, onComplete -> onComplete(Result.success(Unit)) },
+            sendClockSyncPayload = { _, _, onComplete ->
+                sentClockSyncRequests.incrementAndGet()
                 onComplete(Result.success(Unit))
             },
             ioDispatcher = Dispatchers.Unconfined,
             nowElapsedNanos = { 1L },
+            clockSyncDelay = { _ -> },
         )
 
         controller.setNetworkRole(SessionNetworkRole.CLIENT)
@@ -243,15 +357,15 @@ class RaceSessionControllerTest {
         val controller = RaceSessionController(
             loadLastRun = { null },
             saveLastRun = { },
-            sendMessage = { _, messageJson, onComplete ->
-                if (SessionClockSyncRequestMessage.tryParse(messageJson) != null) {
-                    sentClockSyncRequests.incrementAndGet()
-                    firstRequestSent.countDown()
-                }
+            sendMessage = { _, _, onComplete -> onComplete(Result.success(Unit)) },
+            sendClockSyncPayload = { _, _, onComplete ->
+                sentClockSyncRequests.incrementAndGet()
+                firstRequestSent.countDown()
                 onComplete(Result.success(Unit))
             },
             ioDispatcher = Dispatchers.Unconfined,
             nowElapsedNanos = { 1L },
+            clockSyncDelay = { _ -> },
         )
 
         controller.setNetworkRole(SessionNetworkRole.CLIENT)
@@ -276,14 +390,14 @@ class RaceSessionControllerTest {
         val controller = RaceSessionController(
             loadLastRun = { null },
             saveLastRun = { },
-            sendMessage = { _, messageJson, onComplete ->
-                if (SessionClockSyncRequestMessage.tryParse(messageJson) != null) {
-                    sentClockSyncRequests.incrementAndGet()
-                }
+            sendMessage = { _, _, onComplete -> onComplete(Result.success(Unit)) },
+            sendClockSyncPayload = { _, _, onComplete ->
+                sentClockSyncRequests.incrementAndGet()
                 onComplete(Result.success(Unit))
             },
             ioDispatcher = Dispatchers.Unconfined,
             nowElapsedNanos = { 1L },
+            clockSyncDelay = { _ -> },
         )
 
         controller.setNetworkRole(SessionNetworkRole.CLIENT)

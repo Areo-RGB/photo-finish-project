@@ -13,11 +13,20 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.nio.charset.StandardCharsets
 import java.util.UUID
 
 typealias RaceSessionLoadLastRun = suspend () -> LastRunResult?
 typealias RaceSessionSaveLastRun = suspend (LastRunResult) -> Unit
 typealias RaceSessionSendMessage = (endpointId: String, messageJson: String, onComplete: (Result<Unit>) -> Unit) -> Unit
+typealias RaceSessionSendClockSyncPayload = (endpointId: String, payloadBytes: ByteArray, onComplete: (Result<Unit>) -> Unit) -> Unit
+typealias RaceSessionClockSyncDelay = suspend (delayMillis: Long) -> Unit
+
+private data class AcceptedClockSyncSample(
+    val offsetNanos: Long,
+    val roundTripNanos: Long,
+    val acceptOrder: Int,
+)
 
 data class SessionRaceTimeline(
     val hostStartSensorNanos: Long? = null,
@@ -57,12 +66,15 @@ class RaceSessionController(
     private val loadLastRun: RaceSessionLoadLastRun,
     private val saveLastRun: RaceSessionSaveLastRun,
     private val sendMessage: RaceSessionSendMessage,
+    private val sendClockSyncPayload: RaceSessionSendClockSyncPayload,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val nowElapsedNanos: () -> Long = { ClockDomain.nowElapsedNanos() },
+    private val clockSyncDelay: RaceSessionClockSyncDelay = { delayMillis -> kotlinx.coroutines.delay(delayMillis) },
 ) : ViewModel() {
     companion object {
         private const val MAX_ACCEPTED_ROUND_TRIP_NANOS = 120_000_000L
         private const val DEFAULT_CLOCK_SYNC_SAMPLE_COUNT = 8
+        private const val CLOCK_SYNC_BURST_STAGGER_MILLIS = 50L
         private const val CLOCK_LOCK_VALIDITY_NANOS = 6_000_000_000L
         private const val GPS_LOCK_VALIDITY_NANOS = 10_000_000_000L
         private const val DEFAULT_LOCAL_DEVICE_ID = "local-device"
@@ -70,18 +82,43 @@ class RaceSessionController(
     }
 
     constructor(
+        loadLastRun: RaceSessionLoadLastRun,
+        saveLastRun: RaceSessionSaveLastRun,
+        sendMessage: RaceSessionSendMessage,
+        ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+        nowElapsedNanos: () -> Long = { ClockDomain.nowElapsedNanos() },
+        clockSyncDelay: RaceSessionClockSyncDelay = { delayMillis -> kotlinx.coroutines.delay(delayMillis) },
+    ) : this(
+        loadLastRun = loadLastRun,
+        saveLastRun = saveLastRun,
+        sendMessage = sendMessage,
+        sendClockSyncPayload = { endpointId, payloadBytes, onComplete ->
+            val payload = String(payloadBytes, StandardCharsets.ISO_8859_1)
+            sendMessage(endpointId, payload, onComplete)
+        },
+        ioDispatcher = ioDispatcher,
+        nowElapsedNanos = nowElapsedNanos,
+        clockSyncDelay = clockSyncDelay,
+    )
+
+    constructor(
         localRepository: LocalRepository,
         nearbyConnectionsManager: NearbyConnectionsManager,
         ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
         nowElapsedNanos: () -> Long = { ClockDomain.nowElapsedNanos() },
+        clockSyncDelay: RaceSessionClockSyncDelay = { delayMillis -> kotlinx.coroutines.delay(delayMillis) },
     ) : this(
         loadLastRun = { localRepository.loadLastRun() },
         saveLastRun = { run -> localRepository.saveLastRun(run) },
         sendMessage = { endpointId, messageJson, onComplete ->
             nearbyConnectionsManager.sendMessage(endpointId, messageJson, onComplete)
         },
+        sendClockSyncPayload = { endpointId, payloadBytes, onComplete ->
+            nearbyConnectionsManager.sendClockSyncPayload(endpointId, payloadBytes, onComplete)
+        },
         ioDispatcher = ioDispatcher,
         nowElapsedNanos = nowElapsedNanos,
+        clockSyncDelay = clockSyncDelay,
     )
 
     private val _uiState = MutableStateFlow(
@@ -102,10 +139,11 @@ class RaceSessionController(
     val clockState: StateFlow<RaceSessionClockState> = _clockState.asStateFlow()
 
     private val pendingClockSyncSamplesByClientSendNanos = mutableMapOf<Long, Long>()
-    private val acceptedClockOffsetSamples = mutableListOf<Long>()
-    private val acceptedClockRoundTripSamples = mutableListOf<Long>()
+    private val acceptedClockSyncSamples = mutableListOf<AcceptedClockSyncSample>()
     private val endpointIdByStableDeviceId = mutableMapOf<String, String>()
     private val stableDeviceIdByEndpointId = mutableMapOf<String, String>()
+    private var clockSyncBurstDispatchCompleted = false
+    private var acceptedClockSampleCounter = 0
 
     private var localDeviceId = DEFAULT_LOCAL_DEVICE_ID
 
@@ -348,6 +386,10 @@ class RaceSessionController(
                 handleIncomingPayload(endpointId = event.endpointId, rawMessage = event.message)
             }
 
+            is NearbyEvent.ClockSyncSampleReceived -> {
+                handleClockSyncResponseSample(event.sample)
+            }
+
             is NearbyEvent.Error -> {
                 _uiState.value = _uiState.value.copy(lastError = event.message, lastEvent = "error")
             }
@@ -528,22 +570,36 @@ class RaceSessionController(
         }
         _uiState.value = _uiState.value.copy(clockSyncInProgress = true, lastError = null)
         pendingClockSyncSamplesByClientSendNanos.clear()
-        acceptedClockOffsetSamples.clear()
-        acceptedClockRoundTripSamples.clear()
+        acceptedClockSyncSamples.clear()
+        clockSyncBurstDispatchCompleted = false
+        acceptedClockSampleCounter = 0
 
-        repeat(sampleCount.coerceAtLeast(3)) {
-            val sendElapsedNanos = nowElapsedNanos()
-            pendingClockSyncSamplesByClientSendNanos[sendElapsedNanos] = sendElapsedNanos
-            val message = SessionClockSyncRequestMessage(
-                clientSendElapsedNanos = sendElapsedNanos,
-            ).toJsonString()
-            sendMessage(endpointId, message) { result ->
-                result.exceptionOrNull()?.let { error ->
-                    _uiState.value = _uiState.value.copy(
-                        clockSyncInProgress = false,
-                        lastError = "Clock sync send failed: ${error.localizedMessage ?: "unknown"}",
-                    )
+        val totalSamples = sampleCount.coerceAtLeast(3)
+        viewModelScope.launch(ioDispatcher) {
+            repeat(totalSamples) { sampleIndex ->
+                if (sampleIndex > 0) {
+                    clockSyncDelay(CLOCK_SYNC_BURST_STAGGER_MILLIS)
                 }
+                sendClockSyncRequest(endpointId)
+            }
+            clockSyncBurstDispatchCompleted = true
+            maybeFinishClockSyncBurst()
+        }
+    }
+
+    private fun sendClockSyncRequest(endpointId: String) {
+        val sendElapsedNanos = nowElapsedNanos()
+        pendingClockSyncSamplesByClientSendNanos[sendElapsedNanos] = sendElapsedNanos
+        val requestBytes = SessionClockSyncBinaryCodec.encodeRequest(
+            SessionClockSyncBinaryRequest(clientSendElapsedNanos = sendElapsedNanos),
+        )
+        sendClockSyncPayload(endpointId, requestBytes) { result ->
+            result.exceptionOrNull()?.let { error ->
+                pendingClockSyncSamplesByClientSendNanos.remove(sendElapsedNanos)
+                _uiState.value = _uiState.value.copy(
+                    lastError = "Clock sync send failed: ${error.localizedMessage ?: "unknown"}",
+                )
+                maybeFinishClockSyncBurst()
             }
         }
     }
@@ -710,16 +766,6 @@ class RaceSessionController(
             return
         }
 
-        SessionClockSyncRequestMessage.tryParse(rawMessage)?.let { request ->
-            handleIncomingClockSyncRequest(endpointId, request)
-            return
-        }
-
-        SessionClockSyncResponseMessage.tryParse(rawMessage)?.let { response ->
-            handleClockSyncResponseSample(response)
-            return
-        }
-
         SessionSnapshotMessage.tryParse(rawMessage)?.let { snapshot ->
             applySnapshot(snapshot)
             return
@@ -833,28 +879,6 @@ class RaceSessionController(
         }
     }
 
-    private fun handleIncomingClockSyncRequest(
-        endpointId: String,
-        request: SessionClockSyncRequestMessage,
-    ) {
-        if (_uiState.value.networkRole != SessionNetworkRole.HOST) {
-            return
-        }
-        val receiveElapsedNanos = nowElapsedNanos()
-        val response = SessionClockSyncResponseMessage(
-            clientSendElapsedNanos = request.clientSendElapsedNanos,
-            hostReceiveElapsedNanos = receiveElapsedNanos,
-            hostSendElapsedNanos = nowElapsedNanos(),
-        ).toJsonString()
-        sendMessage(endpointId, response) { result ->
-            result.exceptionOrNull()?.let { error ->
-                _uiState.value = _uiState.value.copy(
-                    lastError = "Clock sync response failed: ${error.localizedMessage ?: "unknown"}",
-                )
-            }
-        }
-    }
-
     private fun handleTriggerRequest(request: SessionTriggerRequestMessage) {
         if (_uiState.value.networkRole != SessionNetworkRole.HOST || !_uiState.value.monitoringActive) {
             return
@@ -921,7 +945,7 @@ class RaceSessionController(
         maybePersistCompletedRun(timeline)
     }
 
-    private fun handleClockSyncResponseSample(response: SessionClockSyncResponseMessage) {
+    private fun handleClockSyncResponseSample(response: SessionClockSyncBinaryResponse) {
         val receiveElapsedNanos = nowElapsedNanos()
         val sentElapsedNanos = pendingClockSyncSamplesByClientSendNanos.remove(response.clientSendElapsedNanos)
             ?: return
@@ -934,21 +958,29 @@ class RaceSessionController(
             (response.hostReceiveElapsedNanos - response.clientSendElapsedNanos) +
             (response.hostSendElapsedNanos - receiveElapsedNanos)
         ) / 2L
-        acceptedClockOffsetSamples += offset
-        acceptedClockRoundTripSamples += roundTripNanos
+        acceptedClockSyncSamples += AcceptedClockSyncSample(
+            offsetNanos = offset,
+            roundTripNanos = roundTripNanos,
+            acceptOrder = acceptedClockSampleCounter++,
+        )
         maybeFinishClockSyncBurst()
     }
 
     private fun maybeFinishClockSyncBurst() {
+        if (!clockSyncBurstDispatchCompleted) {
+            return
+        }
         if (pendingClockSyncSamplesByClientSendNanos.isNotEmpty()) {
             return
         }
-        val offset = medianNanos(acceptedClockOffsetSamples)
-        val roundTrip = medianNanos(acceptedClockRoundTripSamples)
-        if (offset != null && roundTrip != null) {
+        val selectedSample = acceptedClockSyncSamples.minWithOrNull(
+            compareBy<AcceptedClockSyncSample> { it.roundTripNanos }
+                .thenBy { it.acceptOrder },
+        )
+        if (selectedSample != null) {
             updateClockState(
-                hostMinusClientElapsedNanos = offset,
-                hostClockRoundTripNanos = roundTrip,
+                hostMinusClientElapsedNanos = selectedSample.offsetNanos,
+                hostClockRoundTripNanos = selectedSample.roundTripNanos,
                 lastClockSyncElapsedNanos = nowElapsedNanos(),
             )
             _uiState.value = _uiState.value.copy(clockSyncInProgress = false, lastEvent = "clock_sync_complete")
@@ -958,8 +990,8 @@ class RaceSessionController(
                 lastError = "Clock sync failed: no acceptable samples",
             )
         }
-        acceptedClockOffsetSamples.clear()
-        acceptedClockRoundTripSamples.clear()
+        acceptedClockSyncSamples.clear()
+        clockSyncBurstDispatchCompleted = false
     }
 
     private fun ingestTimelineSnapshot(snapshot: SessionTimelineSnapshotMessage) {
@@ -1280,16 +1312,4 @@ class RaceSessionController(
         return localDeviceFromState().name
     }
 
-    private fun medianNanos(samples: List<Long>): Long? {
-        if (samples.isEmpty()) {
-            return null
-        }
-        val sorted = samples.sorted()
-        val mid = sorted.size / 2
-        return if (sorted.size % 2 == 0) {
-            (sorted[mid - 1] + sorted[mid]) / 2L
-        } else {
-            sorted[mid]
-        }
-    }
 }

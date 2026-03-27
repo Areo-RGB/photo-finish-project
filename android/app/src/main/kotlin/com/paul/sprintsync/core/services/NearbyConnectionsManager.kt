@@ -17,8 +17,8 @@ import com.google.android.gms.nearby.connection.Payload
 import com.google.android.gms.nearby.connection.PayloadCallback
 import com.google.android.gms.nearby.connection.PayloadTransferUpdate
 import com.google.android.gms.nearby.connection.Strategy
-import com.paul.sprintsync.features.race_session.SessionClockSyncRequestMessage
-import com.paul.sprintsync.features.race_session.SessionClockSyncResponseMessage
+import com.paul.sprintsync.features.race_session.SessionClockSyncBinaryCodec
+import com.paul.sprintsync.features.race_session.SessionClockSyncBinaryResponse
 import java.nio.charset.StandardCharsets
 
 enum class NearbyRole {
@@ -181,6 +181,25 @@ class NearbyConnectionsManager(
             .addOnSuccessListener { onComplete(Result.success(Unit)) }
             .addOnFailureListener { error ->
                 emitError("sendMessage failed: ${error.localizedMessage ?: "unknown"}")
+                onComplete(Result.failure(error))
+            }
+    }
+
+    fun sendClockSyncPayload(
+        endpointId: String,
+        payloadBytes: ByteArray,
+        onComplete: (Result<Unit>) -> Unit,
+    ) {
+        if (!connectedEndpointIds.contains(endpointId)) {
+            onComplete(Result.failure(IllegalStateException("sendClockSyncPayload ignored: endpoint not connected ($endpointId).")))
+            return
+        }
+        val payload = Payload.fromBytes(payloadBytes)
+        connectionsClient
+            .sendPayload(endpointId, payload)
+            .addOnSuccessListener { onComplete(Result.success(Unit)) }
+            .addOnFailureListener { error ->
+                emitError("sendClockSyncPayload failed: ${error.localizedMessage ?: "unknown"}")
                 onComplete(Result.failure(error))
             }
     }
@@ -348,10 +367,10 @@ class NearbyConnectionsManager(
     private val payloadCallback = object : PayloadCallback() {
         override fun onPayloadReceived(endpointId: String, payload: Payload) {
             val bytes = payload.asBytes() ?: return
-            val message = String(bytes, StandardCharsets.UTF_8)
-            if (tryRespondToClockSyncRequest(endpointId, message)) {
+            if (tryHandleClockSyncPayload(endpointId, bytes)) {
                 return
             }
+            val message = String(bytes, StandardCharsets.UTF_8)
             emitEvent(
                 NearbyEvent.PayloadReceived(
                     endpointId = endpointId,
@@ -365,27 +384,68 @@ class NearbyConnectionsManager(
         }
     }
 
-    private fun tryRespondToClockSyncRequest(endpointId: String, message: String): Boolean {
-        if (activeRole != NearbyRole.HOST || !nativeClockSyncHostEnabled) {
+    private fun tryHandleClockSyncPayload(endpointId: String, payloadBytes: ByteArray): Boolean {
+        if (payloadBytes.isEmpty()) {
             return false
+        }
+        if (payloadBytes[0] != SessionClockSyncBinaryCodec.VERSION) {
+            return false
+        }
+        val payloadType = payloadBytes.getOrNull(1)
+        return when (payloadType) {
+            SessionClockSyncBinaryCodec.TYPE_REQUEST -> tryRespondToClockSyncRequest(endpointId, payloadBytes)
+            SessionClockSyncBinaryCodec.TYPE_RESPONSE -> tryEmitClockSyncResponse(endpointId, payloadBytes)
+            else -> {
+                emitError("clock sync payload dropped: unsupported type")
+                true
+            }
+        }
+    }
+
+    private fun tryRespondToClockSyncRequest(endpointId: String, payloadBytes: ByteArray): Boolean {
+        if (activeRole != NearbyRole.HOST || !nativeClockSyncHostEnabled) {
+            return true
         }
         if (!connectedEndpointIds.contains(endpointId)) {
-            return false
+            return true
         }
-        val request = SessionClockSyncRequestMessage.tryParse(message) ?: return false
+        val request = SessionClockSyncBinaryCodec.decodeRequest(payloadBytes)
+        if (request == null) {
+            emitError("clock sync payload dropped: malformed request")
+            return true
+        }
         val hostReceiveElapsedNanos = nowNativeClockSyncElapsedNanos(nativeClockSyncRequireSensorDomain) ?: return true
         val hostSendElapsedNanos = nowNativeClockSyncElapsedNanos(nativeClockSyncRequireSensorDomain) ?: return true
-        val response = SessionClockSyncResponseMessage(
+        val response = SessionClockSyncBinaryResponse(
             clientSendElapsedNanos = request.clientSendElapsedNanos,
             hostReceiveElapsedNanos = hostReceiveElapsedNanos,
             hostSendElapsedNanos = hostSendElapsedNanos,
-        ).toJsonString()
-        val payload = Payload.fromBytes(response.toByteArray(StandardCharsets.UTF_8))
+        )
+        val responseBytes = SessionClockSyncBinaryCodec.encodeResponse(response)
+        val payload = Payload.fromBytes(responseBytes)
         connectionsClient
             .sendPayload(endpointId, payload)
             .addOnFailureListener { error ->
                 emitError("native clock sync response failed: ${error.localizedMessage ?: "unknown"}")
             }
+        return true
+    }
+
+    private fun tryEmitClockSyncResponse(endpointId: String, payloadBytes: ByteArray): Boolean {
+        if (!connectedEndpointIds.contains(endpointId)) {
+            return true
+        }
+        val response = SessionClockSyncBinaryCodec.decodeResponse(payloadBytes)
+        if (response == null) {
+            emitError("clock sync payload dropped: malformed response")
+            return true
+        }
+        emitEvent(
+            NearbyEvent.ClockSyncSampleReceived(
+                endpointId = endpointId,
+                sample = response,
+            ),
+        )
         return true
     }
 

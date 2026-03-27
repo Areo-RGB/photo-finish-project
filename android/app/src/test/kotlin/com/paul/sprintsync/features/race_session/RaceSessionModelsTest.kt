@@ -66,22 +66,54 @@ class RaceSessionModelsTest {
     }
 
     @Test
-    fun `clock sync request and response round-trip`() {
-        val request = SessionClockSyncRequestMessage(clientSendElapsedNanos = 100L)
-        val response = SessionClockSyncResponseMessage(
+    fun `clock sync binary request and response round-trip`() {
+        val request = SessionClockSyncBinaryRequest(clientSendElapsedNanos = 100L)
+        val response = SessionClockSyncBinaryResponse(
             clientSendElapsedNanos = 100L,
             hostReceiveElapsedNanos = 220L,
             hostSendElapsedNanos = 260L,
         )
 
-        val parsedRequest = SessionClockSyncRequestMessage.tryParse(request.toJsonString())
-        val parsedResponse = SessionClockSyncResponseMessage.tryParse(response.toJsonString())
+        val parsedRequest = SessionClockSyncBinaryCodec.decodeRequest(
+            SessionClockSyncBinaryCodec.encodeRequest(request),
+        )
+        val parsedResponse = SessionClockSyncBinaryCodec.decodeResponse(
+            SessionClockSyncBinaryCodec.encodeResponse(response),
+        )
 
         assertNotNull(parsedRequest)
         assertEquals(100L, parsedRequest?.clientSendElapsedNanos)
         assertNotNull(parsedResponse)
         assertEquals(220L, parsedResponse?.hostReceiveElapsedNanos)
         assertEquals(260L, parsedResponse?.hostSendElapsedNanos)
+    }
+
+    @Test
+    fun `clock sync binary codec rejects wrong version type and length`() {
+        val validRequest = SessionClockSyncBinaryCodec.encodeRequest(
+            SessionClockSyncBinaryRequest(clientSendElapsedNanos = 1L),
+        )
+        val wrongVersionRequest = validRequest.copyOf().apply { this[0] = 9 }
+        val wrongTypeRequest = validRequest.copyOf().apply { this[1] = SessionClockSyncBinaryCodec.TYPE_RESPONSE }
+        val wrongLengthRequest = validRequest.copyOf(9)
+
+        val validResponse = SessionClockSyncBinaryCodec.encodeResponse(
+            SessionClockSyncBinaryResponse(
+                clientSendElapsedNanos = 1L,
+                hostReceiveElapsedNanos = 2L,
+                hostSendElapsedNanos = 3L,
+            ),
+        )
+        val wrongVersionResponse = validResponse.copyOf().apply { this[0] = 9 }
+        val wrongTypeResponse = validResponse.copyOf().apply { this[1] = SessionClockSyncBinaryCodec.TYPE_REQUEST }
+        val wrongLengthResponse = validResponse.copyOf(25)
+
+        assertNull(SessionClockSyncBinaryCodec.decodeRequest(wrongVersionRequest))
+        assertNull(SessionClockSyncBinaryCodec.decodeRequest(wrongTypeRequest))
+        assertNull(SessionClockSyncBinaryCodec.decodeRequest(wrongLengthRequest))
+        assertNull(SessionClockSyncBinaryCodec.decodeResponse(wrongVersionResponse))
+        assertNull(SessionClockSyncBinaryCodec.decodeResponse(wrongTypeResponse))
+        assertNull(SessionClockSyncBinaryCodec.decodeResponse(wrongLengthResponse))
     }
 
     @Test

@@ -480,7 +480,7 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
                             displayConnectedHostName = null
                         }
                     }
-                    is NearbyEvent.PayloadReceived, is NearbyEvent.Error -> Unit
+                    is NearbyEvent.PayloadReceived, is NearbyEvent.ClockSyncSampleReceived, is NearbyEvent.Error -> Unit
                 }
             }
             SessionOperatingMode.DISPLAY_HOST -> {
@@ -495,6 +495,7 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
                     is NearbyEvent.EndpointLost,
                     is NearbyEvent.ConnectionResult,
                     is NearbyEvent.EndpointDisconnected,
+                    is NearbyEvent.ClockSyncSampleReceived,
                     is NearbyEvent.Error -> Unit
                 }
             }
@@ -506,6 +507,7 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
             is NearbyEvent.ConnectionResult -> "connection_result"
             is NearbyEvent.EndpointDisconnected -> "endpoint_disconnected"
             is NearbyEvent.PayloadReceived -> "payload_received"
+            is NearbyEvent.ClockSyncSampleReceived -> "clock_sync_sample_received"
             is NearbyEvent.Error -> "error"
         }
         val connectedCount = nearbyConnectionsManager.connectedEndpoints().size

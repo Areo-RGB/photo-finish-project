@@ -1019,15 +1019,15 @@ private fun DisplayResultsCard(
             verticalArrangement = Arrangement.spacedBy(layout.rowSpacing),
         ) {
             rows.forEach { row ->
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(rowHeight)
                         .clip(MaterialTheme.shapes.large)
                         .background(Color(0xFFEDEDF1))
                         .padding(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
                 ) {
                     Text(
                         text = row.deviceName,
@@ -1038,7 +1038,9 @@ private fun DisplayResultsCard(
                             ),
                         ),
                         color = Color(0xFF3F3F48),
+                        textAlign = TextAlign.Center,
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = row.lapTimeLabel,
                         style = MaterialTheme.typography.displayLarge.merge(
@@ -1050,6 +1052,7 @@ private fun DisplayResultsCard(
                             ),
                         ),
                         color = Color(0xFF101015),
+                        textAlign = TextAlign.Center,
                     )
                 }
             }
@@ -1127,46 +1130,46 @@ internal data class DisplayLayoutSpec(
 internal fun displayLayoutSpecForCount(count: Int): DisplayLayoutSpec {
     return when {
         count <= 1 -> DisplayLayoutSpec(
-            rowHeight = 360.dp,
-            minRowHeight = 260.dp,
+            rowHeight = 420.dp,
+            minRowHeight = 300.dp,
             rowSpacing = 24.dp,
             horizontalPadding = 26.dp,
             verticalPadding = 22.dp,
-            timeFont = 128.sp,
+            timeFont = 168.sp,
             deviceFont = 26.sp,
         )
         count == 2 -> DisplayLayoutSpec(
-            rowHeight = 290.dp,
-            minRowHeight = 210.dp,
+            rowHeight = 330.dp,
+            minRowHeight = 230.dp,
             rowSpacing = 18.dp,
             horizontalPadding = 22.dp,
             verticalPadding = 18.dp,
-            timeFont = 104.sp,
+            timeFont = 138.sp,
             deviceFont = 22.sp,
         )
         count in 3..4 -> DisplayLayoutSpec(
-            rowHeight = 220.dp,
-            minRowHeight = 160.dp,
+            rowHeight = 245.dp,
+            minRowHeight = 170.dp,
             rowSpacing = 12.dp,
             horizontalPadding = 18.dp,
             verticalPadding = 14.dp,
-            timeFont = 78.sp,
+            timeFont = 104.sp,
             deviceFont = 18.sp,
         )
         else -> DisplayLayoutSpec(
-            rowHeight = 170.dp,
-            minRowHeight = 120.dp,
+            rowHeight = 182.dp,
+            minRowHeight = 130.dp,
             rowSpacing = 8.dp,
             horizontalPadding = 14.dp,
             verticalPadding = 10.dp,
-            timeFont = 56.sp,
+            timeFont = 72.sp,
             deviceFont = 15.sp,
         )
     }
 }
 
 internal fun clampDisplayTimeFont(base: TextUnit, rowHeight: Dp, density: androidx.compose.ui.unit.Density): TextUnit {
-    val maxByHeight = with(density) { (rowHeight * 0.58f).toSp() }
+    val maxByHeight = with(density) { (rowHeight * 0.74f).toSp() }
     return minOf(base.value, maxByHeight.value).sp
 }
 
