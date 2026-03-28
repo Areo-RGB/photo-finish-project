@@ -292,7 +292,6 @@ fun SprintSyncApp(
                         RunMetricsCard(
                             uiState = uiState,
                             isHost = uiState.isHost,
-                            operatingMode = uiState.operatingMode,
                             showDebugInfo = showDebugInfo,
                             onResetRun = onResetRun,
                         )
@@ -329,15 +328,17 @@ fun SprintSyncApp(
                             onConnectDisplayHost = onConnectDisplayHost,
                         )
                     }
-                    item {
-                        AdvancedDetectionCard(
-                            uiState = uiState,
-                            showDebugInfo = showDebugInfo,
-                            onUpdateThreshold = onUpdateThreshold,
-                            onUpdateRoiCenter = onUpdateRoiCenter,
-                            onUpdateRoiWidth = onUpdateRoiWidth,
-                            onUpdateCooldown = onUpdateCooldown,
-                        )
+                    if (showDebugInfo) {
+                        item {
+                            AdvancedDetectionCard(
+                                uiState = uiState,
+                                showDebugInfo = showDebugInfo,
+                                onUpdateThreshold = onUpdateThreshold,
+                                onUpdateRoiCenter = onUpdateRoiCenter,
+                                onUpdateRoiWidth = onUpdateRoiWidth,
+                                onUpdateCooldown = onUpdateCooldown,
+                            )
+                        }
                     }
                     }
                 }
@@ -966,17 +967,11 @@ private fun AdvancedDetectionCard(
 private fun RunMetricsCard(
     uiState: SprintSyncUiState,
     isHost: Boolean,
-    operatingMode: SessionOperatingMode,
     showDebugInfo: Boolean,
     onResetRun: () -> Unit,
 ) {
     val fpsLabel = uiState.observedFps?.let { String.format("%.1f", it) } ?: "--.-"
     val targetSuffix = uiState.targetFpsUpper?.let { " · target $it" } ?: ""
-    val finishValue = if (uiState.startedSensorNanos != null && uiState.stoppedSensorNanos != null) {
-        formatDurationNanos((uiState.stoppedSensorNanos - uiState.startedSensorNanos).coerceAtLeast(0L))
-    } else {
-        "-"
-    }
     val canReset = shouldShowMonitoringResetAction(
         isHost = isHost,
         startedSensorNanos = uiState.startedSensorNanos,
@@ -997,18 +992,6 @@ private fun RunMetricsCard(
             if (canReset) {
                 TextButton(onClick = onResetRun) {
                     Text("Reset Run")
-                }
-            }
-            Spacer(Modifier.height(2.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                MetricDisplay(label = "Status", value = uiState.runStatusLabel)
-                if (shouldShowRunDetailMetrics(operatingMode)) {
-                    MetricDisplay(label = "Marks", value = uiState.runMarksCount.toString())
-                    MetricDisplay(label = "Finish", value = finishValue)
                 }
             }
         }

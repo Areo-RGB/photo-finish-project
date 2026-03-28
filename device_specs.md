@@ -22,4 +22,4 @@ Values below are extracted from Camera2 static metadata for the camera IDs most 
 
 Note: `Max AE FPS` is derived from `android.control.aeAvailableTargetFpsRanges` and represents normal camera session target range upper bound, not guaranteed delivered frame rate.
 
-Note: `High-Speed Max FPS` is derived from `android.control.availableHighSpeedVideoConfigurations` (for example `1920x1080 30-120`) and may require constrained high-speed session setup. On CPH2399 front camera, high-speed metadata is listed even though `CONSTRAINED_HIGH_SPEED_VIDEO` is not present in capability flags.
+Note: `Max FPS` is derived from `android.control.aeAvailableTargetFpsRanges` and reflects the normal preview pipeline used by this app.
