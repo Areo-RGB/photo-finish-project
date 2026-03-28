@@ -1,6 +1,7 @@
 package com.paul.sprintsync
 
 import android.Manifest
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -61,19 +62,26 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
     private val displayDiscoveredHosts = linkedMapOf<String, String>()
     private val displayLatestLapByDevice = linkedMapOf<String, Long>()
     private var lastRelayedStopSensorNanos: Long? = null
+    private var pendingPermissionScope: PermissionScope = PermissionScope.NETWORK_ONLY
+
+    private enum class PermissionScope {
+        NETWORK_ONLY,
+        CAMERA_AND_NETWORK,
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         sensorNativeController = SensorNativeController(this)
         val localRepository = LocalRepository(this)
+        val nativeClockSyncElapsedNanos: (Boolean) -> Long? = { requireSensorDomain ->
+            sensorNativeController.currentClockSyncElapsedNanos(
+                maxSensorSampleAgeNanos = SENSOR_ELAPSED_PROJECTION_MAX_AGE_NANOS,
+                requireSensorDomain = requireSensorDomain,
+            )
+        }
         nearbyConnectionsManager = NearbyConnectionsManager(
             context = this,
-            nowNativeClockSyncElapsedNanos = { requireSensorDomain ->
-                sensorNativeController.currentClockSyncElapsedNanos(
-                    maxSensorSampleAgeNanos = SENSOR_ELAPSED_PROJECTION_MAX_AGE_NANOS,
-                    requireSensorDomain = requireSensorDomain,
-                )
-            },
+            nowNativeClockSyncElapsedNanos = nativeClockSyncElapsedNanos,
         )
         motionDetectionController = MotionDetectionController(
             localRepository = localRepository,
@@ -88,7 +96,7 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
         sensorNativeController.setEventListener(::onSensorEvent)
         nearbyConnectionsManager.setEventListener(::onNearbyEvent)
 
-        val denied = deniedPermissions()
+        val denied = deniedPermissions(PermissionScope.NETWORK_ONLY)
         updateUiState {
             copy(
                 permissionGranted = denied.isEmpty(),
@@ -105,14 +113,14 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
                 onRequestPermissions = {
                     if (uiState.value.setupBusy) return@SprintSyncApp
                     setSetupBusy(true)
-                    requestPermissionsIfNeeded {
+                    requestPermissionsIfNeeded(PermissionScope.NETWORK_ONLY) {
                         setSetupBusy(false)
                     }
                 },
                 onStartHosting = {
                     if (uiState.value.setupBusy) return@SprintSyncApp
                     setSetupBusy(true)
-                    requestPermissionsIfNeeded {
+                    requestPermissionsIfNeeded(PermissionScope.NETWORK_ONLY) {
                         displayDiscoveryActive = false
                         displayConnectedHostEndpointId = null
                         displayConnectedHostName = null
@@ -128,6 +136,13 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
                                 endpointName = localEndpointName(),
                                 strategy = NearbyTransportStrategy.POINT_TO_POINT,
                             ) { result ->
+                                if (result.isSuccess) {
+                                    // Defensive re-apply after startHosting normalization.
+                                    nearbyConnectionsManager.configureNativeClockSyncHost(
+                                        enabled = true,
+                                        requireSensorDomainClock = false,
+                                    )
+                                }
                                 result.exceptionOrNull()?.let { error ->
                                     appendEvent("host error: ${error.localizedMessage ?: "unknown"}")
                                 }
@@ -144,12 +159,16 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
                 onStartDiscovery = {
                     if (uiState.value.setupBusy) return@SprintSyncApp
                     setSetupBusy(true)
-                    requestPermissionsIfNeeded {
+                    requestPermissionsIfNeeded(PermissionScope.NETWORK_ONLY) {
                         displayDiscoveryActive = false
                         displayConnectedHostEndpointId = null
                         displayConnectedHostName = null
                         displayDiscoveredHosts.clear()
                         raceSessionController.setNetworkRole(SessionNetworkRole.CLIENT)
+                        nearbyConnectionsManager.configureNativeClockSyncHost(
+                            enabled = false,
+                            requireSensorDomainClock = false,
+                        )
                         try {
                             nearbyConnectionsManager.startDiscovery(
                                 serviceId = DEFAULT_SERVICE_ID,
@@ -171,8 +190,12 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
                 onStartSingleDevice = {
                     if (uiState.value.setupBusy) return@SprintSyncApp
                     setSetupBusy(true)
-                    requestPermissionsIfNeeded {
+                    requestPermissionsIfNeeded(PermissionScope.CAMERA_AND_NETWORK) {
                         nearbyConnectionsManager.stopAll()
+                        nearbyConnectionsManager.configureNativeClockSyncHost(
+                            enabled = false,
+                            requireSensorDomainClock = false,
+                        )
                         displayDiscoveryActive = false
                         displayConnectedHostEndpointId = null
                         displayConnectedHostName = null
@@ -187,7 +210,7 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
                 onStartDisplayHost = {
                     if (uiState.value.setupBusy) return@SprintSyncApp
                     setSetupBusy(true)
-                    requestPermissionsIfNeeded {
+                    requestPermissionsIfNeeded(PermissionScope.NETWORK_ONLY) {
                         raceSessionController.startDisplayHostMode()
                         displayLatestLapByDevice.clear()
                         displayDiscoveryActive = false
@@ -218,7 +241,7 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
                     }
                 },
                 onStartMonitoring = {
-                    requestPermissionsIfNeeded {
+                    requestPermissionsIfNeeded(PermissionScope.CAMERA_AND_NETWORK) {
                         val started = raceSessionController.startMonitoring()
                         if (started) {
                             userMonitoringEnabled = true
@@ -232,7 +255,7 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
                     }
                 },
                 onStartDisplayDiscovery = {
-                    requestPermissionsIfNeeded {
+                    requestPermissionsIfNeeded(PermissionScope.NETWORK_ONLY) {
                         displayDiscoveryActive = true
                         displayDiscoveredHosts.clear()
                         try {
@@ -283,6 +306,10 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
                         SessionOperatingMode.SINGLE_DEVICE -> {
                             raceSessionController.stopSingleDeviceMonitoring()
                             nearbyConnectionsManager.stopAll()
+                            nearbyConnectionsManager.configureNativeClockSyncHost(
+                                enabled = false,
+                                requireSensorDomainClock = false,
+                            )
                             displayDiscoveryActive = false
                             displayConnectedHostEndpointId = null
                             displayConnectedHostName = null
@@ -291,6 +318,10 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
                         SessionOperatingMode.DISPLAY_HOST -> {
                             raceSessionController.stopDisplayHostMode()
                             nearbyConnectionsManager.stopAll()
+                            nearbyConnectionsManager.configureNativeClockSyncHost(
+                                enabled = false,
+                                requireSensorDomainClock = false,
+                            )
                             displayLatestLapByDevice.clear()
                         }
                         SessionOperatingMode.NETWORK_RACE -> raceSessionController.stopMonitoring()
@@ -374,13 +405,17 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
         super.onDestroy()
     }
 
-    private fun requestPermissionsIfNeeded(onGranted: () -> Unit) {
-        val denied = deniedPermissions()
+    private fun requestPermissionsIfNeeded(
+        scope: PermissionScope,
+        onGranted: () -> Unit,
+    ) {
+        val denied = deniedPermissions(scope)
         if (denied.isEmpty()) {
             updateUiState { copy(permissionGranted = true, deniedPermissions = emptyList()) }
             onGranted()
             return
         }
+        pendingPermissionScope = scope
         pendingPermissionAction = onGranted
         ActivityCompat.requestPermissions(this, denied.toTypedArray(), PERMISSIONS_REQUEST_CODE)
     }
@@ -394,7 +429,7 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
         if (requestCode != PERMISSIONS_REQUEST_CODE) {
             return
         }
-        val denied = deniedPermissions()
+        val denied = deniedPermissions(pendingPermissionScope)
         val granted = denied.isEmpty()
         updateUiState {
             copy(
@@ -409,6 +444,7 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
             appendEvent("permissions denied: ${denied.joinToString()}")
         }
         pendingPermissionAction = null
+        pendingPermissionScope = PermissionScope.NETWORK_ONLY
     }
 
     private fun setSetupBusy(busy: Boolean) {
@@ -606,6 +642,7 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
         val clockState = raceSessionController.clockState.value
         val motionBefore = motionDetectionController.uiState.value
         val mode = raceState.operatingMode
+        applyRequestedOrientationForMode(mode)
         val shouldRunLocalCapture = shouldRunLocalMonitoring()
 
         if (raceState.stage == SessionStage.LOBBY || raceState.stage == SessionStage.MONITORING) {
@@ -832,18 +869,20 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
         updateUiState { copy(recentEvents = updated) }
     }
 
-    private fun deniedPermissions(): List<String> {
-        return requiredPermissions().filter { permission ->
+    private fun deniedPermissions(scope: PermissionScope): List<String> {
+        return requiredPermissions(scope).filter { permission ->
             ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED
         }
     }
 
-    private fun requiredPermissions(): List<String> {
+    private fun requiredPermissions(scope: PermissionScope): List<String> {
         val permissions = mutableListOf(
-            Manifest.permission.CAMERA,
             Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.ACCESS_FINE_LOCATION,
         )
+        if (scope == PermissionScope.CAMERA_AND_NETWORK) {
+            permissions += Manifest.permission.CAMERA
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions += Manifest.permission.NEARBY_WIFI_DEVICES
         }
@@ -959,6 +998,13 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
         timerRefreshJob = null
     }
 
+    private fun applyRequestedOrientationForMode(mode: SessionOperatingMode) {
+        val targetOrientation = requestedOrientationForMode(mode)
+        if (requestedOrientation != targetOrientation) {
+            requestedOrientation = targetOrientation
+        }
+    }
+
     private fun logRuntimeDiagnostic(message: String) {
         Log.d(TAG, "diag: $message")
     }
@@ -1002,3 +1048,13 @@ internal fun shouldKeepTimerRefreshActive(
 ): Boolean {
     return monitoringActive && isAppResumed && !hasStopSensor
 }
+
+internal fun shouldUseLandscapeForMode(mode: SessionOperatingMode): Boolean =
+    mode == SessionOperatingMode.DISPLAY_HOST
+
+internal fun requestedOrientationForMode(mode: SessionOperatingMode): Int =
+    if (shouldUseLandscapeForMode(mode)) {
+        ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+    } else {
+        ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+    }

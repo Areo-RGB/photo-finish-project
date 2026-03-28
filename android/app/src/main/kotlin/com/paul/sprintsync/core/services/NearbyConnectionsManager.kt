@@ -3,6 +3,8 @@ package com.paul.sprintsync.core.services
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
+import androidx.annotation.VisibleForTesting
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.AdvertisingOptions
 import com.google.android.gms.nearby.connection.ConnectionInfo
@@ -45,9 +47,13 @@ enum class NearbyTransportStrategy(
 class NearbyConnectionsManager(
     context: Context,
     private val nowNativeClockSyncElapsedNanos: (requireSensorDomainClock: Boolean) -> Long?,
+    private val connectionsClient: ConnectionsClient = Nearby.getConnectionsClient(context),
 ) {
+    companion object {
+        private const val CONNECTION_REQUEST_STALE_TIMEOUT_MILLIS = 10_000L
+    }
+
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val connectionsClient: ConnectionsClient = Nearby.getConnectionsClient(context)
     private val connectedEndpointIds = mutableSetOf<String>()
     private val endpointNamesById = mutableMapOf<String, String>()
 
@@ -57,7 +63,9 @@ class NearbyConnectionsManager(
     private var activeRole: NearbyRole = NearbyRole.NONE
     private var activeStrategy: NearbyTransportStrategy = NearbyTransportStrategy.POINT_TO_POINT
     private var pendingEndpointId: String? = null
+    private var pendingEndpointSetAtMillis: Long = 0L
     private var requestedEndpointId: String? = null
+    private var requestedEndpointSetAtMillis: Long = 0L
     private var nativeClockSyncHostEnabled = false
     private var nativeClockSyncRequireSensorDomain = false
 
@@ -75,6 +83,10 @@ class NearbyConnectionsManager(
         nativeClockSyncHostEnabled = enabled
         nativeClockSyncRequireSensorDomain = requireSensorDomainClock
     }
+
+    @VisibleForTesting
+    internal fun nativeClockSyncHostConfigForTest(): Pair<Boolean, Boolean> =
+        nativeClockSyncHostEnabled to nativeClockSyncRequireSensorDomain
 
     fun startHosting(
         serviceId: String,
@@ -136,6 +148,7 @@ class NearbyConnectionsManager(
         endpointName: String,
         onComplete: (Result<Unit>) -> Unit,
     ) {
+        expireStaleConnectionRequestState()
         if (activeRole != NearbyRole.CLIENT) {
             onComplete(Result.failure(IllegalStateException("requestConnection ignored: not in client mode.")))
             return
@@ -154,12 +167,14 @@ class NearbyConnectionsManager(
         }
 
         requestedEndpointId = endpointId
+        requestedEndpointSetAtMillis = SystemClock.elapsedRealtime()
         connectionsClient
             .requestConnection(endpointName, endpointId, connectionLifecycleCallback)
             .addOnSuccessListener { onComplete(Result.success(Unit)) }
             .addOnFailureListener { error ->
                 if (requestedEndpointId == endpointId) {
                     requestedEndpointId = null
+                    requestedEndpointSetAtMillis = 0L
                 }
                 emitError("requestConnection failed: ${error.localizedMessage ?: "unknown"}")
                 onComplete(Result.failure(error))
@@ -243,22 +258,47 @@ class NearbyConnectionsManager(
 
     private fun clearTransientState() {
         pendingEndpointId = null
+        pendingEndpointSetAtMillis = 0L
         requestedEndpointId = null
+        requestedEndpointSetAtMillis = 0L
         connectedEndpointIds.clear()
         endpointNamesById.clear()
-        nativeClockSyncHostEnabled = false
-        nativeClockSyncRequireSensorDomain = false
     }
 
     private fun clearEndpointState(endpointId: String) {
         if (pendingEndpointId == endpointId) {
             pendingEndpointId = null
+            pendingEndpointSetAtMillis = 0L
         }
         if (requestedEndpointId == endpointId) {
             requestedEndpointId = null
+            requestedEndpointSetAtMillis = 0L
         }
         connectedEndpointIds.remove(endpointId)
         endpointNamesById.remove(endpointId)
+    }
+
+    private fun expireStaleConnectionRequestState() {
+        if (connectedEndpointIds.isNotEmpty()) {
+            return
+        }
+        val now = SystemClock.elapsedRealtime()
+        if (
+            pendingEndpointId != null &&
+            pendingEndpointSetAtMillis > 0 &&
+            now - pendingEndpointSetAtMillis > CONNECTION_REQUEST_STALE_TIMEOUT_MILLIS
+        ) {
+            pendingEndpointId = null
+            pendingEndpointSetAtMillis = 0L
+        }
+        if (
+            requestedEndpointId != null &&
+            requestedEndpointSetAtMillis > 0 &&
+            now - requestedEndpointSetAtMillis > CONNECTION_REQUEST_STALE_TIMEOUT_MILLIS
+        ) {
+            requestedEndpointId = null
+            requestedEndpointSetAtMillis = 0L
+        }
     }
 
     private val endpointDiscoveryCallback = object : EndpointDiscoveryCallback() {
@@ -312,8 +352,10 @@ class NearbyConnectionsManager(
             }
 
             pendingEndpointId = endpointId
+            pendingEndpointSetAtMillis = SystemClock.elapsedRealtime()
             if (activeRole == NearbyRole.CLIENT) {
                 requestedEndpointId = endpointId
+                requestedEndpointSetAtMillis = pendingEndpointSetAtMillis
             }
 
             connectionsClient

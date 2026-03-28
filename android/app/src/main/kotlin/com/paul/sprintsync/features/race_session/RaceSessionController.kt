@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.nio.charset.StandardCharsets
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 typealias RaceSessionLoadLastRun = suspend () -> LastRunResult?
 typealias RaceSessionSaveLastRun = suspend (LastRunResult) -> Unit
@@ -75,6 +76,7 @@ class RaceSessionController(
         private const val MAX_ACCEPTED_ROUND_TRIP_NANOS = 120_000_000L
         private const val DEFAULT_CLOCK_SYNC_SAMPLE_COUNT = 8
         private const val CLOCK_SYNC_BURST_STAGGER_MILLIS = 50L
+        private const val CLOCK_SYNC_SAMPLE_EXPIRY_MILLIS = 1_500L
         private const val CLOCK_LOCK_VALIDITY_NANOS = 6_000_000_000L
         private const val GPS_LOCK_VALIDITY_NANOS = 10_000_000_000L
         private const val DEFAULT_LOCAL_DEVICE_ID = "local-device"
@@ -138,7 +140,7 @@ class RaceSessionController(
     private val _clockState = MutableStateFlow(RaceSessionClockState())
     val clockState: StateFlow<RaceSessionClockState> = _clockState.asStateFlow()
 
-    private val pendingClockSyncSamplesByClientSendNanos = mutableMapOf<Long, Long>()
+    private val pendingClockSyncSamplesByClientSendNanos = ConcurrentHashMap<Long, Long>()
     private val acceptedClockSyncSamples = mutableListOf<AcceptedClockSyncSample>()
     private val endpointIdByStableDeviceId = mutableMapOf<String, String>()
     private val stableDeviceIdByEndpointId = mutableMapOf<String, String>()
@@ -387,13 +389,20 @@ class RaceSessionController(
             }
 
             is NearbyEvent.ClockSyncSampleReceived -> {
-                handleClockSyncResponseSample(event.sample)
+                onClockSyncSampleReceived(endpointId = event.endpointId, sample = event.sample)
             }
 
             is NearbyEvent.Error -> {
                 _uiState.value = _uiState.value.copy(lastError = event.message, lastEvent = "error")
             }
         }
+    }
+
+    fun onClockSyncSampleReceived(endpointId: String, sample: SessionClockSyncBinaryResponse) {
+        if (!_uiState.value.connectedEndpoints.contains(endpointId)) {
+            return
+        }
+        handleClockSyncResponseSample(sample)
     }
 
     fun assignRole(deviceId: String, role: SessionDeviceRole) {
@@ -588,8 +597,9 @@ class RaceSessionController(
     }
 
     private fun sendClockSyncRequest(endpointId: String) {
-        val sendElapsedNanos = nowElapsedNanos()
+        val sendElapsedNanos = nextUniqueClientSendElapsedNanos()
         pendingClockSyncSamplesByClientSendNanos[sendElapsedNanos] = sendElapsedNanos
+        scheduleClockSyncSampleExpiry(sendElapsedNanos)
         val requestBytes = SessionClockSyncBinaryCodec.encodeRequest(
             SessionClockSyncBinaryRequest(clientSendElapsedNanos = sendElapsedNanos),
         )
@@ -602,6 +612,24 @@ class RaceSessionController(
                 maybeFinishClockSyncBurst()
             }
         }
+    }
+
+    private fun scheduleClockSyncSampleExpiry(sendElapsedNanos: Long) {
+        viewModelScope.launch(ioDispatcher) {
+            kotlinx.coroutines.delay(CLOCK_SYNC_SAMPLE_EXPIRY_MILLIS)
+            val removed = pendingClockSyncSamplesByClientSendNanos.remove(sendElapsedNanos)
+            if (removed != null) {
+                maybeFinishClockSyncBurst()
+            }
+        }
+    }
+
+    private fun nextUniqueClientSendElapsedNanos(): Long {
+        var candidate = nowElapsedNanos()
+        while (pendingClockSyncSamplesByClientSendNanos.containsKey(candidate)) {
+            candidate += 1L
+        }
+        return candidate
     }
 
     fun ingestLocalTrigger(triggerType: String, splitIndex: Int, triggerSensorNanos: Long, broadcast: Boolean = true) {
@@ -917,10 +945,24 @@ class RaceSessionController(
             device.copy(isLocal = device.id == resolvedSelfId)
         }
 
-        val timeline = SessionRaceTimeline(
-            hostStartSensorNanos = snapshot.hostStartSensorNanos?.let { mapHostSensorToLocalSensor(it) ?: it },
-            hostStopSensorNanos = snapshot.hostStopSensorNanos?.let { mapHostSensorToLocalSensor(it) ?: it },
-        )
+        val mappedStart = snapshot.hostStartSensorNanos?.let { mapHostSensorToLocalSensor(it) }
+        val mappedStop = snapshot.hostStopSensorNanos?.let { mapHostSensorToLocalSensor(it) }
+        val mappingAvailable =
+            (snapshot.hostStartSensorNanos == null || mappedStart != null) &&
+                (snapshot.hostStopSensorNanos == null || mappedStop != null)
+        val timeline = if (mappingAvailable) {
+            SessionRaceTimeline(
+                hostStartSensorNanos = mappedStart,
+                hostStopSensorNanos = mappedStop,
+            )
+        } else {
+            _uiState.value.timeline
+        }
+        val snapshotEvent = if (mappingAvailable) {
+            "snapshot_applied"
+        } else {
+            "snapshot_applied_unsynced_timeline_ignored"
+        }
 
         _uiState.value = _uiState.value.copy(
             stage = snapshot.stage,
@@ -938,7 +980,7 @@ class RaceSessionController(
             ),
             deviceRole = mappedDevices.firstOrNull { it.id == resolvedSelfId }?.role ?: SessionDeviceRole.UNASSIGNED,
             timeline = timeline,
-            lastEvent = "snapshot_applied",
+            lastEvent = snapshotEvent,
             lastError = null,
         )
 

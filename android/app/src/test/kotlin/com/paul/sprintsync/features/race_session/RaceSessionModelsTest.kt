@@ -140,4 +140,17 @@ class RaceSessionModelsTest {
         assertEquals("stable-device-1", parsed?.stableDeviceId)
         assertEquals("Pixel 8 Pro", parsed?.deviceName)
     }
+
+    @Test
+    fun `device identity parser accepts legacy payload without udp endpoint`() {
+        val legacyPayload = """
+            {"type":"device_identity","stableDeviceId":"stable-device-2","deviceName":"Legacy Phone"}
+        """.trimIndent()
+
+        val parsed = SessionDeviceIdentityMessage.tryParse(legacyPayload)
+
+        assertNotNull(parsed)
+        assertEquals("stable-device-2", parsed?.stableDeviceId)
+        assertEquals("Legacy Phone", parsed?.deviceName)
+    }
 }

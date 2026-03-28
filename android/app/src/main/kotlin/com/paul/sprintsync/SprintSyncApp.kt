@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -147,6 +149,7 @@ fun SprintSyncApp(
     var showPreview by rememberSaveable { mutableStateOf(true) }
     var showDebugInfo by rememberSaveable { mutableStateOf(false) }
     val effectiveShowPreview = showPreview
+    val localDevice = uiState.devices.firstOrNull { it.isLocal }
     val isDisplayHostMode =
         uiState.stage == SessionStage.MONITORING &&
             uiState.operatingMode == SessionOperatingMode.DISPLAY_HOST
@@ -303,11 +306,17 @@ fun SprintSyncApp(
                         MonitoringSummaryCard(
                             isHost = uiState.isHost,
                             localRole = uiState.localRole,
+                            localCameraFacing = localDevice?.cameraFacing ?: SessionCameraFacing.REAR,
                             connectionTypeLabel = uiState.monitoringConnectionTypeLabel,
                             syncModeLabel = uiState.monitoringSyncModeLabel,
                             latencyMs = uiState.monitoringLatencyMs,
                             userMonitoringEnabled = uiState.userMonitoringEnabled,
                             onSetMonitoringEnabled = onSetMonitoringEnabled,
+                            onAssignLocalCameraFacing = { facing ->
+                                localDevice?.let { device ->
+                                    onAssignCameraFacing(device.id, facing)
+                                }
+                            },
                             effectiveShowPreview = effectiveShowPreview,
                             onShowPreviewChanged = { showPreview = it },
                             previewViewFactory = previewViewFactory,
@@ -627,11 +636,13 @@ private fun DeviceAssignmentRow(
 private fun MonitoringSummaryCard(
     isHost: Boolean,
     localRole: SessionDeviceRole,
+    localCameraFacing: SessionCameraFacing,
     connectionTypeLabel: String,
     syncModeLabel: String,
     latencyMs: Int?,
     userMonitoringEnabled: Boolean,
     onSetMonitoringEnabled: (Boolean) -> Unit,
+    onAssignLocalCameraFacing: (SessionCameraFacing) -> Unit,
     effectiveShowPreview: Boolean,
     onShowPreviewChanged: (Boolean) -> Unit,
     previewViewFactory: SensorNativePreviewViewFactory,
@@ -666,11 +677,13 @@ private fun MonitoringSummaryCard(
                     MonitoringPreviewInfoPanel(
                         isHost = isHost,
                         localRole = localRole,
+                        localCameraFacing = localCameraFacing,
                         connectionTypeLabel = connectionTypeLabel,
                         syncModeLabel = syncModeLabel,
                         latencyLabel = latencyLabel,
                         userMonitoringEnabled = userMonitoringEnabled,
                         onSetMonitoringEnabled = onSetMonitoringEnabled,
+                        onAssignLocalCameraFacing = onAssignLocalCameraFacing,
                         effectiveShowPreview = effectiveShowPreview,
                         onShowPreviewChanged = onShowPreviewChanged,
                         operatingMode = operatingMode,
@@ -687,11 +700,13 @@ private fun MonitoringSummaryCard(
                     MonitoringPreviewInfoPanel(
                         isHost = isHost,
                         localRole = localRole,
+                        localCameraFacing = localCameraFacing,
                         connectionTypeLabel = connectionTypeLabel,
                         syncModeLabel = syncModeLabel,
                         latencyLabel = latencyLabel,
                         userMonitoringEnabled = userMonitoringEnabled,
                         onSetMonitoringEnabled = onSetMonitoringEnabled,
+                        onAssignLocalCameraFacing = onAssignLocalCameraFacing,
                         effectiveShowPreview = effectiveShowPreview,
                         onShowPreviewChanged = onShowPreviewChanged,
                         operatingMode = operatingMode,
@@ -722,11 +737,13 @@ private fun MonitoringSummaryCard(
 private fun MonitoringPreviewInfoPanel(
     isHost: Boolean,
     localRole: SessionDeviceRole,
+    localCameraFacing: SessionCameraFacing,
     connectionTypeLabel: String,
     syncModeLabel: String,
     latencyLabel: String,
     userMonitoringEnabled: Boolean,
     onSetMonitoringEnabled: (Boolean) -> Unit,
+    onAssignLocalCameraFacing: (SessionCameraFacing) -> Unit,
     effectiveShowPreview: Boolean,
     onShowPreviewChanged: (Boolean) -> Unit,
     operatingMode: SessionOperatingMode,
@@ -758,23 +775,6 @@ private fun MonitoringPreviewInfoPanel(
         }
         Text("Connection: $connectionTypeLabel", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
         Text("Sync: $syncModeLabel · Latency: $latencyLabel", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-        if (shouldShowMonitoringRoleAndToggles(operatingMode)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    "Monitoring: ${if (userMonitoringEnabled) "On" else "Off"}",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Spacer(Modifier.width(8.dp))
-                Switch(
-                    checked = userMonitoringEnabled,
-                    enabled = true,
-                    onCheckedChange = onSetMonitoringEnabled,
-                )
-            }
-        }
         if (shouldShowMonitoringPreviewToggle(operatingMode)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -786,6 +786,24 @@ private fun MonitoringPreviewInfoPanel(
                     checked = effectiveShowPreview,
                     enabled = true,
                     onCheckedChange = onShowPreviewChanged,
+                )
+            }
+        }
+        if (shouldShowSingleDeviceCameraFacingToggle(operatingMode)) {
+            Spacer(Modifier.height(4.dp))
+            Text("Camera", style = MaterialTheme.typography.bodySmall)
+            SingleChoiceSegmentedButtonRow {
+                SegmentedButton(
+                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                    onClick = { onAssignLocalCameraFacing(SessionCameraFacing.REAR) },
+                    selected = localCameraFacing == SessionCameraFacing.REAR,
+                    label = { Text("Rear") },
+                )
+                SegmentedButton(
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                    onClick = { onAssignLocalCameraFacing(SessionCameraFacing.FRONT) },
+                    selected = localCameraFacing == SessionCameraFacing.FRONT,
+                    label = { Text("Front") },
                 )
             }
         }
@@ -1023,21 +1041,24 @@ private fun DisplayResultsCard(
         }
 
         val count = rows.size.coerceAtLeast(1)
-        val availableHeight = maxHeight.takeIf { it > 0.dp } ?: (layout.rowHeight * count) + (layout.rowSpacing * (count - 1))
-        val rowHeight = ((availableHeight - (layout.rowSpacing * (count - 1))) / count).coerceAtLeast(layout.minRowHeight)
-        val rowContentWidth = (maxWidth - (layout.horizontalPadding * 2)).coerceAtLeast(1.dp)
-        val clampedTimeFont = clampDisplayTimeFont(layout.timeFont, rowHeight, rowContentWidth, density)
-        val clampedDeviceFont = clampDisplayLabelFont(layout.deviceFont, rowHeight, density)
+        val visibleCards = displayHorizontalVisibleCardSlots(count)
+        val availableHeight = maxHeight.takeIf { it > 0.dp } ?: layout.rowHeight
+        val cardHeight = availableHeight.coerceAtLeast(layout.minRowHeight)
+        val cardWidth = ((maxWidth - (layout.rowSpacing * (visibleCards - 1))) / visibleCards)
+            .coerceAtLeast(layout.minRowHeight)
+        val rowContentWidth = (cardWidth - (layout.horizontalPadding * 2)).coerceAtLeast(1.dp)
+        val clampedTimeFont = clampDisplayTimeFont(layout.timeFont, cardHeight, rowContentWidth, density)
+        val clampedDeviceFont = clampDisplayLabelFont(layout.deviceFont, cardHeight, density)
 
-        Column(
+        LazyRow(
             modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(layout.rowSpacing),
+            horizontalArrangement = Arrangement.spacedBy(layout.rowSpacing),
         ) {
-            rows.forEach { row ->
+            items(rows) { row ->
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(rowHeight)
+                        .width(cardWidth)
+                        .height(cardHeight)
                         .clip(MaterialTheme.shapes.large)
                         .background(Color(0xFFEDEDF1))
                         .padding(horizontal = layout.horizontalPadding, vertical = layout.verticalPadding),
@@ -1129,13 +1150,16 @@ internal fun shouldShowMonitoringResetAction(
     isHost: Boolean,
     startedSensorNanos: Long?,
     stoppedSensorNanos: Long?,
-): Boolean = isHost && startedSensorNanos != null && stoppedSensorNanos != null
+): Boolean = isHost && startedSensorNanos != null
 
 internal fun shouldShowDisplayRelayControls(mode: SessionOperatingMode): Boolean =
     mode == SessionOperatingMode.SINGLE_DEVICE
 
 internal fun shouldShowMonitoringRoleAndToggles(mode: SessionOperatingMode): Boolean =
     mode != SessionOperatingMode.SINGLE_DEVICE
+
+internal fun shouldShowSingleDeviceCameraFacingToggle(mode: SessionOperatingMode): Boolean =
+    mode == SessionOperatingMode.SINGLE_DEVICE
 
 internal fun shouldShowMonitoringPreview(mode: SessionOperatingMode, effectiveShowPreview: Boolean): Boolean =
     mode == SessionOperatingMode.SINGLE_DEVICE || effectiveShowPreview
@@ -1197,6 +1221,12 @@ internal fun displayLayoutSpecForCount(count: Int): DisplayLayoutSpec {
             deviceFont = 15.sp,
         )
     }
+}
+
+internal fun displayHorizontalVisibleCardSlots(count: Int): Int = when {
+    count <= 1 -> 1
+    count == 2 -> 2
+    else -> 3
 }
 
 internal fun clampDisplayTimeFont(

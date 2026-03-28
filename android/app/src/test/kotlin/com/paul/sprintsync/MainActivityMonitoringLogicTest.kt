@@ -1,5 +1,6 @@
 package com.paul.sprintsync
 
+import com.paul.sprintsync.features.race_session.SessionOperatingMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -133,5 +134,12 @@ class MainActivityMonitoringLogicTest {
         )
 
         assertEquals(LocalCaptureAction.START, action)
+    }
+
+    @Test
+    fun `display host mode prefers landscape orientation`() {
+        assertTrue(shouldUseLandscapeForMode(SessionOperatingMode.DISPLAY_HOST))
+        assertFalse(shouldUseLandscapeForMode(SessionOperatingMode.SINGLE_DEVICE))
+        assertFalse(shouldUseLandscapeForMode(SessionOperatingMode.NETWORK_RACE))
     }
 }

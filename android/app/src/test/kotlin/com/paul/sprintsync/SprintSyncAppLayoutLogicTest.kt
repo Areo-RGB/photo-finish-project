@@ -34,7 +34,7 @@ class SprintSyncAppLayoutLogicTest {
     }
 
     @Test
-    fun `monitoring reset action only shows for host after run has finished`() {
+    fun `monitoring reset action shows for host once a run has started`() {
         assertTrue(
             shouldShowMonitoringResetAction(
                 isHost = true,
@@ -51,10 +51,18 @@ class SprintSyncAppLayoutLogicTest {
             ),
         )
 
-        assertFalse(
+        assertTrue(
             shouldShowMonitoringResetAction(
                 isHost = true,
                 startedSensorNanos = 10L,
+                stoppedSensorNanos = null,
+            ),
+        )
+
+        assertFalse(
+            shouldShowMonitoringResetAction(
+                isHost = true,
+                startedSensorNanos = null,
                 stoppedSensorNanos = null,
             ),
         )
@@ -72,6 +80,13 @@ class SprintSyncAppLayoutLogicTest {
         assertFalse(shouldShowMonitoringRoleAndToggles(SessionOperatingMode.SINGLE_DEVICE))
         assertTrue(shouldShowMonitoringRoleAndToggles(SessionOperatingMode.NETWORK_RACE))
         assertTrue(shouldShowMonitoringRoleAndToggles(SessionOperatingMode.DISPLAY_HOST))
+    }
+
+    @Test
+    fun `single-device mode shows local camera facing toggle`() {
+        assertTrue(shouldShowSingleDeviceCameraFacingToggle(SessionOperatingMode.SINGLE_DEVICE))
+        assertFalse(shouldShowSingleDeviceCameraFacingToggle(SessionOperatingMode.NETWORK_RACE))
+        assertFalse(shouldShowSingleDeviceCameraFacingToggle(SessionOperatingMode.DISPLAY_HOST))
     }
 
     @Test
@@ -104,6 +119,14 @@ class SprintSyncAppLayoutLogicTest {
         assertTrue(one.rowHeight > two.rowHeight)
         assertTrue(two.rowHeight > three.rowHeight)
         assertTrue(three.rowHeight > many.rowHeight)
+    }
+
+    @Test
+    fun `display host horizontal layout caps visible card slots`() {
+        assertTrue(displayHorizontalVisibleCardSlots(1) == 1)
+        assertTrue(displayHorizontalVisibleCardSlots(2) == 2)
+        assertTrue(displayHorizontalVisibleCardSlots(3) == 3)
+        assertTrue(displayHorizontalVisibleCardSlots(8) == 3)
     }
 
     @Test

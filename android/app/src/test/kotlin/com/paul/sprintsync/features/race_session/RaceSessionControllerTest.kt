@@ -261,6 +261,72 @@ class RaceSessionControllerTest {
     }
 
     @Test
+    fun `snapshot ignores host timeline when client is unsynced`() {
+        val controller = RaceSessionController(
+            loadLastRun = { null },
+            saveLastRun = { },
+            sendMessage = { _, _, onComplete -> onComplete(Result.success(Unit)) },
+            ioDispatcher = Dispatchers.Unconfined,
+            nowElapsedNanos = { 1L },
+        )
+
+        controller.setNetworkRole(SessionNetworkRole.CLIENT)
+        controller.updateClockState(
+            hostMinusClientElapsedNanos = 100L,
+            hostSensorMinusElapsedNanos = 500L,
+            localSensorMinusElapsedNanos = 200L,
+        )
+        controller.onNearbyEvent(
+            NearbyEvent.PayloadReceived(
+                endpointId = "ep-1",
+                message = SessionTimelineSnapshotMessage(
+                    hostStartSensorNanos = 1_000L,
+                    hostStopSensorNanos = null,
+                    sentElapsedNanos = 10L,
+                ).toJsonString(),
+            ),
+        )
+        assertEquals(600L, controller.uiState.value.timeline.hostStartSensorNanos)
+        assertNull(controller.uiState.value.timeline.hostStopSensorNanos)
+
+        controller.updateClockState(
+            hostMinusClientElapsedNanos = null,
+            hostSensorMinusElapsedNanos = null,
+            localSensorMinusElapsedNanos = null,
+            hostGpsUtcOffsetNanos = null,
+            localGpsUtcOffsetNanos = null,
+        )
+        controller.onNearbyEvent(
+            NearbyEvent.PayloadReceived(
+                endpointId = "ep-1",
+                message = SessionSnapshotMessage(
+                    stage = SessionStage.MONITORING,
+                    monitoringActive = true,
+                    devices = listOf(
+                        SessionDevice(
+                            id = "local",
+                            name = "Local",
+                            role = SessionDeviceRole.STOP,
+                            isLocal = true,
+                        ),
+                    ),
+                    hostStartSensorNanos = 5_000L,
+                    hostStopSensorNanos = 7_000L,
+                    runId = "run-1",
+                    hostSensorMinusElapsedNanos = null,
+                    hostGpsUtcOffsetNanos = null,
+                    hostGpsFixAgeNanos = null,
+                    selfDeviceId = "local",
+                ).toJsonString(),
+            ),
+        )
+
+        assertEquals(600L, controller.uiState.value.timeline.hostStartSensorNanos)
+        assertNull(controller.uiState.value.timeline.hostStopSensorNanos)
+        assertEquals("snapshot_applied_unsynced_timeline_ignored", controller.uiState.value.lastEvent)
+    }
+
+    @Test
     fun `single device mode auto resets active timeline and retains latest completed lap`() {
         val sentMessages = mutableListOf<String>()
         val controller = RaceSessionController(
@@ -308,6 +374,54 @@ class RaceSessionControllerTest {
         assertEquals(2_000L, state.timeline.hostStartSensorNanos)
         assertNull(state.timeline.hostStopSensorNanos)
         assertNull(state.latestCompletedTimeline)
+    }
+
+    @Test
+    fun `clock sync sample can be ingested from non-nearby transport`() {
+        var nowNanos = 0L
+        val sentPayloads = mutableListOf<ByteArray>()
+        val controller = RaceSessionController(
+            loadLastRun = { null },
+            saveLastRun = { },
+            sendMessage = { _, _, onComplete -> onComplete(Result.success(Unit)) },
+            sendClockSyncPayload = { _, payloadBytes, onComplete ->
+                sentPayloads += payloadBytes
+                onComplete(Result.success(Unit))
+            },
+            ioDispatcher = Dispatchers.Unconfined,
+            nowElapsedNanos = {
+                nowNanos += 1_000L
+                nowNanos
+            },
+            clockSyncDelay = { _ -> },
+        )
+        controller.onNearbyEvent(
+            NearbyEvent.ConnectionResult(
+                endpointId = "ep-1",
+                endpointName = "peer",
+                connected = true,
+                statusCode = 0,
+                statusMessage = null,
+            ),
+        )
+        controller.startClockSyncBurst(endpointId = "ep-1", sampleCount = 3)
+
+        val requests = sentPayloads.mapNotNull { SessionClockSyncBinaryCodec.decodeRequest(it) }
+        assertEquals(3, requests.size)
+        requests.forEach { request ->
+            controller.onClockSyncSampleReceived(
+                endpointId = "ep-1",
+                sample = SessionClockSyncBinaryResponse(
+                    clientSendElapsedNanos = request.clientSendElapsedNanos,
+                    hostReceiveElapsedNanos = request.clientSendElapsedNanos + 200L,
+                    hostSendElapsedNanos = request.clientSendElapsedNanos + 300L,
+                ),
+            )
+        }
+
+        assertFalse(controller.uiState.value.clockSyncInProgress)
+        assertEquals("clock_sync_complete", controller.uiState.value.lastEvent)
+        assertNotNull(controller.clockState.value.hostMinusClientElapsedNanos)
     }
 
     @Test
@@ -385,7 +499,7 @@ class RaceSessionControllerTest {
     }
 
     @Test
-    fun `in-progress NTP burst is not cancelled when GPS becomes fresh`() {
+    fun `in-progress NTP burst eventually completes when samples never return`() {
         val sentClockSyncRequests = AtomicInteger(0)
         val controller = RaceSessionController(
             loadLastRun = { null },
@@ -426,7 +540,7 @@ class RaceSessionControllerTest {
         )
 
         Thread.sleep(2500)
-        assertTrue(controller.uiState.value.clockSyncInProgress)
+        assertFalse(controller.uiState.value.clockSyncInProgress)
         assertEquals(3, sentClockSyncRequests.get())
     }
 }
