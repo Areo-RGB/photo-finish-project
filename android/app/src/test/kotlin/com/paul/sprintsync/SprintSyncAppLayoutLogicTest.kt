@@ -107,6 +107,12 @@ class SprintSyncAppLayoutLogicTest {
     }
 
     @Test
+    fun `monitoring connection panel only shows when debug is on`() {
+        assertTrue(shouldShowMonitoringConnectionDebugInfo(showDebugInfo = true))
+        assertFalse(shouldShowMonitoringConnectionDebugInfo(showDebugInfo = false))
+    }
+
+    @Test
     fun `display layout uses expected size tiers by row count`() {
         val one = displayLayoutSpecForCount(1)
         val two = displayLayoutSpecForCount(2)
@@ -150,7 +156,7 @@ class SprintSyncAppLayoutLogicTest {
             rowContentWidth = 330.dp,
             density = density,
         )
-        assertTrue(clamped.value <= 60f)
+        assertTrue(clamped.value <= 67f)
     }
 
     @Test

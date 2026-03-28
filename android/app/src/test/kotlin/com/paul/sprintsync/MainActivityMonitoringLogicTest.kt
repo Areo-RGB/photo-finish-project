@@ -142,4 +142,50 @@ class MainActivityMonitoringLogicTest {
         assertFalse(shouldUseLandscapeForMode(SessionOperatingMode.SINGLE_DEVICE))
         assertFalse(shouldUseLandscapeForMode(SessionOperatingMode.NETWORK_RACE))
     }
+
+    @Test
+    fun `timer display uses ss cc below one minute and no three-digit milliseconds`() {
+        assertEquals("00.00", formatElapsedTimerDisplay(totalMillis = 0))
+        assertEquals("01.67", formatElapsedTimerDisplay(totalMillis = 1_678))
+        assertEquals("59.99", formatElapsedTimerDisplay(totalMillis = 59_999))
+    }
+
+    @Test
+    fun `timer display prepends minutes from one minute onward with centiseconds`() {
+        assertEquals("01:00.00", formatElapsedTimerDisplay(totalMillis = 60_000))
+        assertEquals("02:05.43", formatElapsedTimerDisplay(totalMillis = 125_432))
+    }
+
+    @Test
+    fun `applies live local camera facing update when local monitoring active`() {
+        assertTrue(
+            shouldApplyLiveLocalCameraFacingUpdate(
+                isLocalMotionMonitoring = true,
+                assignedDeviceId = "local-1",
+                localDeviceId = "local-1",
+            ),
+        )
+    }
+
+    @Test
+    fun `does not apply live local camera facing update when monitoring inactive`() {
+        assertFalse(
+            shouldApplyLiveLocalCameraFacingUpdate(
+                isLocalMotionMonitoring = false,
+                assignedDeviceId = "local-1",
+                localDeviceId = "local-1",
+            ),
+        )
+    }
+
+    @Test
+    fun `does not apply live local camera facing update for non local device`() {
+        assertFalse(
+            shouldApplyLiveLocalCameraFacingUpdate(
+                isLocalMotionMonitoring = true,
+                assignedDeviceId = "remote-1",
+                localDeviceId = "local-1",
+            ),
+        )
+    }
 }

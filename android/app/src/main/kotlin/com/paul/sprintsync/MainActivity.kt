@@ -338,6 +338,15 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
                 },
                 onAssignCameraFacing = { deviceId, facing ->
                     raceSessionController.assignCameraFacing(deviceId, facing)
+                    if (
+                        shouldApplyLiveLocalCameraFacingUpdate(
+                            isLocalMotionMonitoring = motionDetectionController.uiState.value.monitoring,
+                            assignedDeviceId = deviceId,
+                            localDeviceId = localDeviceId(),
+                        )
+                    ) {
+                        applyLocalMonitoringConfigFromSession()
+                    }
                     syncControllerSummaries()
                 },
                 onUpdateThreshold = { value ->
@@ -941,7 +950,7 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
         stoppedSensorNanos: Long?,
         monitoringActive: Boolean,
     ): String {
-        val started = startedSensorNanos ?: return "00:00.000"
+        val started = startedSensorNanos ?: return "00.00"
         val terminal = stoppedSensorNanos ?: if (monitoringActive) {
             raceSessionController.estimateLocalSensorNanosNow()
         } else {
@@ -949,10 +958,7 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
         }
         val elapsedNanos = (terminal - started).coerceAtLeast(0L)
         val totalMillis = elapsedNanos / 1_000_000L
-        val minutes = totalMillis / 60_000L
-        val seconds = (totalMillis % 60_000L) / 1_000L
-        val millis = totalMillis % 1_000L
-        return String.format("%02d:%02d.%03d", minutes, seconds, millis)
+        return formatElapsedTimerDisplay(totalMillis)
     }
 
     private fun formatElapsedDuration(durationNanos: Long): String {
@@ -1051,6 +1057,27 @@ internal fun shouldKeepTimerRefreshActive(
 
 internal fun shouldUseLandscapeForMode(mode: SessionOperatingMode): Boolean =
     mode == SessionOperatingMode.DISPLAY_HOST
+
+internal fun shouldApplyLiveLocalCameraFacingUpdate(
+    isLocalMotionMonitoring: Boolean,
+    assignedDeviceId: String,
+    localDeviceId: String,
+): Boolean {
+    return isLocalMotionMonitoring && assignedDeviceId == localDeviceId
+}
+
+internal fun formatElapsedTimerDisplay(totalMillis: Long): String {
+    val clamped = totalMillis.coerceAtLeast(0L)
+    val totalSeconds = clamped / 1_000L
+    val minutes = totalSeconds / 60L
+    val seconds = totalSeconds % 60L
+    val centiseconds = (clamped % 1_000L) / 10L
+    return if (minutes > 0L) {
+        String.format("%02d:%02d.%02d", minutes, seconds, centiseconds)
+    } else {
+        String.format("%02d.%02d", seconds, centiseconds)
+    }
+}
 
 internal fun requestedOrientationForMode(mode: SessionOperatingMode): Int =
     if (shouldUseLandscapeForMode(mode)) {

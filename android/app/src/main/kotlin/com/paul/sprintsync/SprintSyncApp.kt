@@ -93,7 +93,7 @@ data class SprintSyncUiState(
     val clockLockWarningText: String? = null,
     val runStatusLabel: String = "Ready",
     val runMarksCount: Int = 0,
-    val elapsedDisplay: String = "00:00.000",
+    val elapsedDisplay: String = "00.00",
     val threshold: Double = 0.006,
     val roiCenterX: Double = 0.5,
     val roiWidth: Double = 0.12,
@@ -306,6 +306,7 @@ fun SprintSyncApp(
                             isHost = uiState.isHost,
                             localRole = uiState.localRole,
                             localCameraFacing = localDevice?.cameraFacing ?: SessionCameraFacing.REAR,
+                            showDebugInfo = showDebugInfo,
                             connectionTypeLabel = uiState.monitoringConnectionTypeLabel,
                             syncModeLabel = uiState.monitoringSyncModeLabel,
                             latencyMs = uiState.monitoringLatencyMs,
@@ -638,6 +639,7 @@ private fun MonitoringSummaryCard(
     isHost: Boolean,
     localRole: SessionDeviceRole,
     localCameraFacing: SessionCameraFacing,
+    showDebugInfo: Boolean,
     connectionTypeLabel: String,
     syncModeLabel: String,
     latencyMs: Int?,
@@ -679,6 +681,7 @@ private fun MonitoringSummaryCard(
                         isHost = isHost,
                         localRole = localRole,
                         localCameraFacing = localCameraFacing,
+                        showDebugInfo = showDebugInfo,
                         connectionTypeLabel = connectionTypeLabel,
                         syncModeLabel = syncModeLabel,
                         latencyLabel = latencyLabel,
@@ -702,6 +705,7 @@ private fun MonitoringSummaryCard(
                         isHost = isHost,
                         localRole = localRole,
                         localCameraFacing = localCameraFacing,
+                        showDebugInfo = showDebugInfo,
                         connectionTypeLabel = connectionTypeLabel,
                         syncModeLabel = syncModeLabel,
                         latencyLabel = latencyLabel,
@@ -739,6 +743,7 @@ private fun MonitoringPreviewInfoPanel(
     isHost: Boolean,
     localRole: SessionDeviceRole,
     localCameraFacing: SessionCameraFacing,
+    showDebugInfo: Boolean,
     connectionTypeLabel: String,
     syncModeLabel: String,
     latencyLabel: String,
@@ -774,8 +779,10 @@ private fun MonitoringPreviewInfoPanel(
                 }
             }
         }
-        Text("Connection: $connectionTypeLabel", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-        Text("Sync: $syncModeLabel · Latency: $latencyLabel", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+        if (shouldShowMonitoringConnectionDebugInfo(showDebugInfo)) {
+            Text("Connection: $connectionTypeLabel", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            Text("Sync: $syncModeLabel · Latency: $latencyLabel", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+        }
         if (shouldShowMonitoringPreviewToggle(operatingMode)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -792,7 +799,6 @@ private fun MonitoringPreviewInfoPanel(
         }
         if (shouldShowSingleDeviceCameraFacingToggle(operatingMode)) {
             Spacer(Modifier.height(4.dp))
-            Text("Camera", style = MaterialTheme.typography.bodySmall)
             SingleChoiceSegmentedButtonRow {
                 SegmentedButton(
                     shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
@@ -810,7 +816,6 @@ private fun MonitoringPreviewInfoPanel(
         }
         if (shouldShowDisplayRelayControls(operatingMode)) {
             Spacer(Modifier.height(4.dp))
-            SectionHeader("Display Relay")
             PrimaryButton(
                 text = if (displayDiscoveryActive) "Display: Discovering" else "Display",
                 onClick = onStartDisplayDiscovery,
@@ -983,7 +988,6 @@ private fun RunMetricsCard(
             if (shouldShowCameraFpsInfo(showDebugInfo)) {
                 Text("Camera: $fpsLabel fps · ${uiState.cameraFpsModeLabel}$targetSuffix", style = MaterialTheme.typography.bodySmall)
             }
-            Text("Timer")
             Text(
                 text = uiState.elapsedDisplay,
                 style = MaterialTheme.typography.displayLarge.merge(TabularMonospaceTypography),
@@ -1144,6 +1148,8 @@ internal fun shouldShowMonitoringRoleAndToggles(mode: SessionOperatingMode): Boo
 internal fun shouldShowSingleDeviceCameraFacingToggle(mode: SessionOperatingMode): Boolean =
     mode == SessionOperatingMode.SINGLE_DEVICE
 
+internal fun shouldShowMonitoringConnectionDebugInfo(showDebugInfo: Boolean): Boolean = showDebugInfo
+
 internal fun shouldShowMonitoringPreview(mode: SessionOperatingMode, effectiveShowPreview: Boolean): Boolean =
     mode == SessionOperatingMode.SINGLE_DEVICE || effectiveShowPreview
 
@@ -1219,7 +1225,7 @@ internal fun clampDisplayTimeFont(
     density: androidx.compose.ui.unit.Density,
 ): TextUnit {
     val maxByHeight = with(density) { (rowHeight * 0.74f).toSp() }
-    val maxChars = 9f // "MM:SS.mmm"
+    val maxChars = 8f // "MM:SS.cc"
     val widthFactor = 0.62f // Approximate monospace glyph width in ems.
     val maxByWidth = with(density) { (rowContentWidth / (maxChars * widthFactor)).toSp() }
     return minOf(base.value, maxByHeight.value, maxByWidth.value).sp
@@ -1234,8 +1240,5 @@ internal fun clampDisplayLabelFont(base: TextUnit, rowHeight: Dp, density: andro
 
 private fun formatDurationNanos(nanos: Long): String {
     val totalMillis = (nanos / 1_000_000L).coerceAtLeast(0L)
-    val minutes = totalMillis / 60_000L
-    val seconds = (totalMillis % 60_000L) / 1_000L
-    val millis = totalMillis % 1_000L
-    return String.format("%02d:%02d.%03d", minutes, seconds, millis)
+    return formatElapsedTimerDisplay(totalMillis)
 }
