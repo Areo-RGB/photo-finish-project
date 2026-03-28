@@ -12,6 +12,9 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import com.paul.sprintsync.core.repositories.LocalRepository
 import com.paul.sprintsync.core.services.NearbyEvent
@@ -403,6 +406,14 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
         logRuntimeDiagnostic("host resumed")
         sensorNativeController.onHostResumed()
         syncControllerSummaries()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus) {
+            return
+        }
+        applySystemUiForMode(raceSessionController.uiState.value.operatingMode)
     }
 
     override fun onDestroy() {
@@ -963,10 +974,7 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
 
     private fun formatElapsedDuration(durationNanos: Long): String {
         val totalMillis = (durationNanos / 1_000_000L).coerceAtLeast(0L)
-        val minutes = totalMillis / 60_000L
-        val seconds = (totalMillis % 60_000L) / 1_000L
-        val millis = totalMillis % 1_000L
-        return String.format("%02d:%02d.%03d", minutes, seconds, millis)
+        return formatElapsedTimerDisplay(totalMillis)
     }
 
     private fun updateUiState(update: SprintSyncUiState.() -> SprintSyncUiState) {
@@ -1008,6 +1016,19 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
         val targetOrientation = requestedOrientationForMode(mode)
         if (requestedOrientation != targetOrientation) {
             requestedOrientation = targetOrientation
+        }
+        applySystemUiForMode(mode)
+    }
+
+    private fun applySystemUiForMode(mode: SessionOperatingMode) {
+        val immersive = shouldUseImmersiveModeForMode(mode)
+        WindowCompat.setDecorFitsSystemWindows(window, !immersive)
+        val controller = WindowInsetsControllerCompat(window, window.decorView)
+        if (immersive) {
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+        } else {
+            controller.show(WindowInsetsCompat.Type.systemBars())
         }
     }
 
@@ -1056,6 +1077,9 @@ internal fun shouldKeepTimerRefreshActive(
 }
 
 internal fun shouldUseLandscapeForMode(mode: SessionOperatingMode): Boolean =
+    mode == SessionOperatingMode.DISPLAY_HOST
+
+internal fun shouldUseImmersiveModeForMode(mode: SessionOperatingMode): Boolean =
     mode == SessionOperatingMode.DISPLAY_HOST
 
 internal fun shouldApplyLiveLocalCameraFacingUpdate(

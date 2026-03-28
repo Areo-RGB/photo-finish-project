@@ -327,6 +327,7 @@ fun SprintSyncApp(
                             displayDiscoveryActive = uiState.displayDiscoveryActive,
                             onStartDisplayDiscovery = onStartDisplayDiscovery,
                             onConnectDisplayHost = onConnectDisplayHost,
+                            onResetRun = onResetRun,
                         )
                     }
                     if (showDebugInfo) {
@@ -656,6 +657,7 @@ private fun MonitoringSummaryCard(
     displayDiscoveryActive: Boolean,
     onStartDisplayDiscovery: () -> Unit,
     onConnectDisplayHost: (String) -> Unit,
+    onResetRun: () -> Unit,
 ) {
     val latencyLabel = when (syncModeLabel) {
         "NTP" -> if (latencyMs == null) "-" else "$latencyMs ms"
@@ -667,7 +669,82 @@ private fun MonitoringSummaryCard(
         BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
             val useTwoColumns = maxWidth >= 340.dp
 
-            if (useTwoColumns) {
+            if (operatingMode == SessionOperatingMode.SINGLE_DEVICE) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (shouldShowMonitoringConnectionDebugInfo(showDebugInfo)) {
+                        Text("Connection: $connectionTypeLabel", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Text("Sync: $syncModeLabel · Latency: $latencyLabel", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    }
+                    if (shouldShowSingleDeviceCameraFacingToggle(operatingMode)) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            SingleChoiceSegmentedButtonRow {
+                                SegmentedButton(
+                                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                                    onClick = { onAssignLocalCameraFacing(SessionCameraFacing.REAR) },
+                                    selected = localCameraFacing == SessionCameraFacing.REAR,
+                                    label = { Text("Rear") },
+                                )
+                                SegmentedButton(
+                                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                                    onClick = { onAssignLocalCameraFacing(SessionCameraFacing.FRONT) },
+                                    selected = localCameraFacing == SessionCameraFacing.FRONT,
+                                    label = { Text("Front") },
+                                )
+                            }
+                        }
+                    }
+                    if (shouldShowMonitoringPreview(operatingMode, effectiveShowPreview)) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            PreviewSurface(
+                                previewViewFactory = previewViewFactory,
+                                roiCenterX = roiCenterX,
+                            )
+                        }
+                    }
+                    if (shouldShowDisplayRelayControls(operatingMode)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            PrimaryButton(
+                                text = if (displayDiscoveryActive) "Display: Discovering" else "Display",
+                                onClick = onStartDisplayDiscovery,
+                                modifier = Modifier.weight(1f),
+                            )
+                            OutlinedButton(
+                                onClick = onResetRun,
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Text("Reset")
+                            }
+                        }
+                        if (displayConnectedHostName != null) {
+                            Text(
+                                text = "Connected to $displayConnectedHostName",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray,
+                            )
+                        }
+                        val hosts = discoveredDisplayHosts.entries.toList()
+                        if (hosts.isNotEmpty()) {
+                            hosts.forEach { host ->
+                                OutlinedButton(
+                                    onClick = { onConnectDisplayHost(host.key) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text("Join ${host.value}")
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if (useTwoColumns) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -977,27 +1054,23 @@ private fun RunMetricsCard(
 ) {
     val fpsLabel = uiState.observedFps?.let { String.format("%.1f", it) } ?: "--.-"
     val targetSuffix = uiState.targetFpsUpper?.let { " · target $it" } ?: ""
-    val canReset = shouldShowMonitoringResetAction(
-        isHost = isHost,
-        startedSensorNanos = uiState.startedSensorNanos,
-        stoppedSensorNanos = uiState.stoppedSensorNanos,
-    )
     SprintSyncCard {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            SectionHeader("Sprint Stopwatch")
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
             if (shouldShowCameraFpsInfo(showDebugInfo)) {
                 Text("Camera: $fpsLabel fps · ${uiState.cameraFpsModeLabel}$targetSuffix", style = MaterialTheme.typography.bodySmall)
             }
             Text(
                 text = uiState.elapsedDisplay,
-                style = MaterialTheme.typography.displayLarge.merge(TabularMonospaceTypography),
-                textAlign = TextAlign.Start,
+                style = MaterialTheme.typography.displayLarge
+                    .copy(fontSize = MaterialTheme.typography.displayLarge.fontSize * 1.12f)
+                    .merge(TabularMonospaceTypography),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
             )
-            if (canReset) {
-                TextButton(onClick = onResetRun) {
-                    Text("Reset Run")
-                }
-            }
         }
     }
 }

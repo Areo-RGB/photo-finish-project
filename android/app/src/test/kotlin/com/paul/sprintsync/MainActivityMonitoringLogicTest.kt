@@ -144,6 +144,13 @@ class MainActivityMonitoringLogicTest {
     }
 
     @Test
+    fun `display host mode uses immersive fullscreen and other modes do not`() {
+        assertTrue(shouldUseImmersiveModeForMode(SessionOperatingMode.DISPLAY_HOST))
+        assertFalse(shouldUseImmersiveModeForMode(SessionOperatingMode.SINGLE_DEVICE))
+        assertFalse(shouldUseImmersiveModeForMode(SessionOperatingMode.NETWORK_RACE))
+    }
+
+    @Test
     fun `timer display uses ss cc below one minute and no three-digit milliseconds`() {
         assertEquals("00.00", formatElapsedTimerDisplay(totalMillis = 0))
         assertEquals("01.67", formatElapsedTimerDisplay(totalMillis = 1_678))
